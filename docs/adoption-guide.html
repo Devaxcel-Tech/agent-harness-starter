@@ -70,7 +70,7 @@ tools/qa/
 docs/
   DECISIONS.md                      an empty register with its schema
 .githooks/pre-commit                discovers and runs every gate
-.github/workflows/                  gates + secret scanning
+examples/workflows/                 gates + secret-scan templates
 .gitleaks.toml                      secret-scanning config
 examples/vendored.json              template for the drift manifest
 examples/agents/                    four review lenses (Stage 9)
@@ -292,7 +292,7 @@ if __name__ == "__main__":
     </tbody>
   </table>
   <p>
-    Copy <code>.github/workflows/gates.yml</code> for CI. Note the <code>if: ${{ !cancelled() }}</code>
+    Copy <code>examples/workflows/gates.yml</code> into your <code>.github/workflows/</code> for CI. Note the <code>if: ${{ !cancelled() }}</code>
     on every step after the first: without it, one failing check silently skips the rest, and a reader
     cannot tell a check that passed from one that never ran.
   </p>
@@ -316,7 +316,7 @@ if __name__ == "__main__":
 
   <h3>Stage 5 — secret scanning</h3>
   <p>
-    Copy <code>.gitleaks.toml</code> and <code>.github/workflows/secret-scan.yml</code>. Three details
+    Copy <code>.gitleaks.toml</code>, and <code>examples/workflows/secret-scan.yml</code> into your <code>.github/workflows/</code>. Three details
     that matter more than the tool choice:
   </p>
   <table>

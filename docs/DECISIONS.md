@@ -43,3 +43,14 @@ to-do items stops being read, and then the one real blocked decision in it is in
 ```
 
 <!-- Rows go below. Keep them in numeric order. -->
+
+## DEC-1 — Does the kit run its own CI, or ship workflows as templates only?
+
+- **Status:** OPEN
+- **Issue:** https://github.com/Devaxcel-Tech/agent-harness-starter/issues/1
+- **What is owed:** whether this kit runs the gates on itself in CI, or only ships workflow files for adopters to copy.
+- **Why the work stopped:** it did not stop — the workflows moved to `examples/workflows/` so the repo could be published, and that move needs ratifying rather than inheriting by accident.
+- **What was done instead:** templates only. The kit's own suite is run locally before release; nothing runs it on push.
+- **Candidate answers:** (a) the kit runs its own CI, with a self-check workflow alongside the copyable templates (b) templates only, with correctness proven locally and the README saying so
+- **What differs in the code:** (a) adds `.github/workflows/self-check.yml` calling `tools/gates/check_gates_test.py`, and obliges every pusher to hold the workflow scope (b) leaves `examples/workflows/gates.yml` as the only workflow and adds a line to `README.md`
+- **Ruling:** —

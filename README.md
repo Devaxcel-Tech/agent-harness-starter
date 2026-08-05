@@ -36,7 +36,7 @@ Every control here restores one specific piece of independence that automation t
 
 # 1. Copy the kit in
 cp -r tools/gates tools/qa .githooks .gitleaks.toml docs/DECISIONS.md <your-repo>/
-cp .github/workflows/*.yml <your-repo>/.github/workflows/
+cp examples/workflows/*.yml <your-repo>/.github/workflows/
 
 # 2. Prove the gates can fail — run this FIRST, it validates the validators
 python3 tools/gates/check_gates_test.py
@@ -60,7 +60,7 @@ docs/DECISIONS.md                             empty register + schema
 docs/pattern-handbook.html/.pdf               why each control exists
 docs/adoption-guide.html/.pdf                 how to install it, in stages
 .githooks/pre-commit                          discovers and runs every gate
-.github/workflows/                            gates + secret scanning
+examples/workflows/                           gates + secret-scan templates
 .gitleaks.toml                                secret-scanning config
 examples/vendored.json                        drift manifest template
 examples/agents/                              four review lenses
