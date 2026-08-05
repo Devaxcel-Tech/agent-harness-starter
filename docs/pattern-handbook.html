@@ -783,6 +783,70 @@ a TEST file only     → exit 0   (mutating a test is meaningless)</code></pre>
     Then write down, once, which half is which. The failure is not that some tooling is per-machine —
     that is unavoidable. The failure is <strong>nobody knowing which half they are missing.</strong>
   </p>
+
+  <h3>Concrete tools, by purpose and language</h3>
+  <p>
+    Off-the-shelf options that implement each control. Named because a pattern you cannot install is a
+    lecture — the ones marked <em>verified</em> were run in a production implementation of this pattern
+    at the version shown, and the numbers elsewhere in this document came from them.
+  </p>
+  <table>
+    <thead><tr><th style="width:17%">Control</th><th style="width:24%">Tool</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td rowspan="4"><strong>Mutation testing</strong></td>
+          <td><strong>Stryker</strong> (JS/TS) <span class="chip pass">✓ 9.6.1</span></td>
+          <td>Config <code>stryker.config.json</code>. Pair the <code>typescript-checker</code> plugin with it, and expect a large share of mutants to be excluded as type-invalid — quote the denominator.</td></tr>
+      <tr><td><strong>PIT</strong> (Java/Kotlin)</td><td>Expects Maven or Gradle; under Bazel it needs a small runner target.</td></tr>
+      <tr><td><strong>mutmut</strong> / <strong>cosmic-ray</strong> (Python)</td><td>mutmut is the lower-friction of the two.</td></tr>
+      <tr><td><strong>cargo-mutants</strong> (Rust)</td><td>Integrates with the normal cargo test loop.</td></tr>
+      <tr><td rowspan="3"><strong>Property tests</strong></td>
+          <td><strong>fast-check</strong> (JS/TS) <span class="chip pass">✓ 4.9.0</span></td>
+          <td>Good shrinking; the failure it reports is usually minimal enough to read directly.</td></tr>
+      <tr><td><strong>Hypothesis</strong> (Python)</td><td>The reference implementation of the idea. Note it no longer ships a universal wheel, which matters if you hash-pin.</td></tr>
+      <tr><td><strong>jqwik</strong> (Java)</td><td>A JUnit-Platform engine, so <code>@Property</code> classes run under the same target as <code>@Test</code>.</td></tr>
+      <tr><td><strong>Fault injection</strong></td>
+          <td><strong>Testcontainers</strong> + <strong>Toxiproxy</strong></td>
+          <td>Testcontainers starts the real dependency; Toxiproxy kills, delays or corrupts it. Needs a container runtime in the job. <strong>Budget properly for this one</strong> — it is the control most often documented and never built.</td></tr>
+      <tr><td rowspan="2"><strong>Secret scanning</strong></td>
+          <td><strong>gitleaks</strong> <span class="chip pass">✓ 8.30.1</span></td>
+          <td>Pin the version and install the binary rather than using a marketplace action — a security control must not be able to fail for a licensing reason. Always <code>--redact</code>.</td></tr>
+      <tr><td><strong>trufflehog</strong></td><td>Verifies candidate secrets against the provider, so fewer false positives and a slower scan.</td></tr>
+      <tr><td><strong>Invariant lint</strong></td>
+          <td><strong>Semgrep</strong> <span class="chip pass">✓ 1.172.0</span></td>
+          <td>Encode project-specific rules, not generic ones. <strong>Give every rule a fixture that must fire and one that must not</strong> — an unproven rule cannot be believed, so it can never be promoted to blocking.</td></tr>
+      <tr><td><strong>Code intelligence</strong></td>
+          <td><strong>GitNexus</strong> <span class="chip pass">✓ 1.6.9</span></td>
+          <td>Local, zero-server code graph over MCP — call chains and <em>blast radius before a change</em>. Use it to size the test surface. Prefer local tools here; a hosted graph means shipping your code to a third party.</td></tr>
+      <tr><td rowspan="2"><strong>Browser / UI</strong></td>
+          <td><strong>Playwright MCP</strong> + <strong>chrome-devtools MCP</strong> <span class="chip pass">✓</span></td>
+          <td>Drive a real browser; read console and network. Add <strong>axe</strong> for accessibility.</td></tr>
+      <tr><td><strong>Marionette MCP</strong> (Flutter)</td><td>Drives a <em>running</em> Flutter app over the Dart VM service — widget tree, gestures, screenshots. The mobile analogue of Playwright-MCP.</td></tr>
+      <tr><td><strong>Contract / schema</strong></td>
+          <td><strong>buf</strong> (protobuf) · <strong>Pact</strong> (consumer-driven)</td>
+          <td>buf flags breaking schema changes; Pact checks a consumer's expectation against your published contract.</td></tr>
+      <tr><td><strong>Build reproducibility</strong></td>
+          <td><strong>Bazel</strong> <span class="chip pass">✓ 7.2.1</span> · language lockfiles</td>
+          <td>Whatever you use, <strong>commit the lock and make a stale lock fail the build</strong>. A lock nothing verifies is a record, not a check.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Agent-side tooling worth knowing about</h3>
+  <table>
+    <thead><tr><th style="width:22%">Category</th><th style="width:22%">Examples</th><th>What to watch for</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Process skill packs</strong></td><td>brainstorming · systematic debugging · TDD · plan-then-execute</td>
+        <td>These shape <em>how</em> an agent approaches work, which matters more than any single prompt. Commit the ones your team relies on; otherwise output quality varies per machine and nobody can reproduce anyone else's results.</td></tr>
+      <tr><td><strong>Cross-session memory</strong></td><td>a searchable store of prior sessions</td>
+        <td>High value for "did we already solve this?" — and it is a <em>store of your work</em>, so check where it lives before enabling it.</td></tr>
+      <tr><td><strong>Spec-driven planners</strong></td><td>phase/roadmap planners that write durable artifacts</td>
+        <td>Useful, and they add a second planning surface beside your issue tracker. Decide which is authoritative or they drift. Check whether the artifacts are durable documents or scratch before deciding what to commit.</td></tr>
+      <tr><td><strong>Different-lineage bridges</strong></td><td>a CLI for a model from another family</td>
+        <td><strong>Wrap it in a committed script.</strong> These break in environment-specific ways — one failed authentication on every call while its own health check reported ready. A wrapper fixes it for everyone, not just whoever debugged it. Watch for free-tier quotas: a review that did not run is not a review.</td></tr>
+      <tr><td><strong>Context proxies</strong></td><td>compression / caching / routing layers</td>
+        <td>They sit in front of <em>every</em> request and <strong>modify prompts in flight</strong> — including tool output, which can mangle a command's result. Document any you install where people will look when a tool behaves strangely.</td></tr>
+    </tbody>
+  </table>
+
 </section>
 
 <section class="page-break">
