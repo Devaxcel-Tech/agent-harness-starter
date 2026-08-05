@@ -53,7 +53,8 @@
     <div><span class="n">09</span>Independence controls that outrank tests</div>
     <div><span class="n">10</span>Grounding, and writing it back</div>
     <div><span class="n">11</span>The agent tooling layer</div>
-    <div><span class="n">12</span>What this pattern cannot give you</div>
+    <div><span class="n">12</span>Walkthrough — one feature, design to PR</div>
+    <div><span class="n">13</span>What this pattern cannot give you</div>
   </div>
 
   <h3>The seven controls, in one table</h3>
@@ -830,27 +831,183 @@ a TEST file only     → exit 0   (mutating a test is meaningless)</code></pre>
     </tbody>
   </table>
 
-  <h3>Agent-side tooling worth knowing about</h3>
+  <h3>Agent-side tooling — the ones worth knowing by name</h3>
+  <p>
+    These are the plugins and skills that shape <em>how</em> an agent works, which in practice matters
+    more than any single prompt. Named because "install a process skill pack" is not actionable advice.
+    All are third-party and freely available; the notes are what a production run of them taught.
+  </p>
   <table>
-    <thead><tr><th style="width:22%">Category</th><th style="width:22%">Examples</th><th>What to watch for</th></tr></thead>
+    <thead><tr><th style="width:20%">Tool</th><th style="width:18%">Category</th><th>What it gives you, and what to watch</th></tr></thead>
     <tbody>
-      <tr><td><strong>Process skill packs</strong></td><td>brainstorming · systematic debugging · TDD · plan-then-execute</td>
-        <td>These shape <em>how</em> an agent approaches work, which matters more than any single prompt. Commit the ones your team relies on; otherwise output quality varies per machine and nobody can reproduce anyone else's results.</td></tr>
-      <tr><td><strong>Cross-session memory</strong></td><td>a searchable store of prior sessions</td>
-        <td>High value for "did we already solve this?" — and it is a <em>store of your work</em>, so check where it lives before enabling it.</td></tr>
-      <tr><td><strong>Spec-driven planners</strong></td><td>phase/roadmap planners that write durable artifacts</td>
-        <td>Useful, and they add a second planning surface beside your issue tracker. Decide which is authoritative or they drift. Check whether the artifacts are durable documents or scratch before deciding what to commit.</td></tr>
-      <tr><td><strong>Different-lineage bridges</strong></td><td>a CLI for a model from another family</td>
-        <td><strong>Wrap it in a committed script.</strong> These break in environment-specific ways — one failed authentication on every call while its own health check reported ready. A wrapper fixes it for everyone, not just whoever debugged it. Watch for free-tier quotas: a review that did not run is not a review.</td></tr>
-      <tr><td><strong>Context proxies</strong></td><td>compression / caching / routing layers</td>
-        <td>They sit in front of <em>every</em> request and <strong>modify prompts in flight</strong> — including tool output, which can mangle a command's result. Document any you install where people will look when a tool behaves strangely.</td></tr>
+      <tr><td><strong>superpowers</strong></td><td>process skills</td>
+        <td>Brainstorming, systematic debugging, test-driven development, writing plans. <strong>Process skills come first and implementation skills follow</strong> — they set the approach. The highest-leverage pack to adopt first, because it changes how a task is decomposed rather than how one file is written.</td></tr>
+      <tr><td><strong>get-shit-done</strong> (GSD)</td><td>spec-driven planning</td>
+        <td>Phase planning, roadmaps, execution with checkpoints; writes durable artifacts to a <code>.planning/</code> directory. <strong>Two cautions.</strong> It adds a second planning surface beside your issue tracker — decide which is authoritative or they drift. And distinguish its <em>durable</em> documents from its auto-checkpoint files: commit the former, ignore the latter, and do not git-ignore the whole directory in frustration.</td></tr>
+      <tr><td><strong>claude-mem</strong></td><td>cross-session memory</td>
+        <td>A searchable index of previous sessions — <em>"did we already solve this?"</em> answered in one call rather than by rediscovery. It is a <strong>store of your work</strong>, so check where it lives before enabling it on a regulated codebase.</td></tr>
+      <tr><td><strong>ui-ux-pro-max</strong></td><td>UI/UX design</td>
+        <td>Design intelligence with style directions, palettes, font pairings and chart guidance across many frameworks. <strong>Needs no API key</strong>, which is why it works as a default. Prefer it over hosted UI generators for framework-matched output.</td></tr>
+      <tr><td><strong>21st.dev magic</strong> · <strong>Stitch</strong> · <strong>Figma MCP</strong></td><td>UI generation</td>
+        <td>Hosted alternatives. <strong>Check the framework</strong> — magic is React-leaning, so on a Vue or Svelte project treat its output as <em>reference, never paste</em>. All need keys or a running desktop app, so all can be silently unavailable.</td></tr>
+      <tr><td><strong>GitNexus</strong></td><td>code intelligence</td>
+        <td>A local, zero-server code graph over MCP. Its best use is not search — it is <strong>blast radius before a change</strong>, which tells you what to test.</td></tr>
+      <tr><td><strong>grok-build</strong> (or any other-family CLI)</td><td>different-lineage review</td>
+        <td><strong>Wrap it in a committed script.</strong> These break environment-specifically — this one failed authentication on every call while its own health check reported ready, because a local proxy had redirected it. A wrapper fixes it for everyone rather than for whoever debugged it. Watch free-tier quotas: <strong>a review that did not run is not a review.</strong></td></tr>
+      <tr><td><strong>headroom</strong> (or any proxy)</td><td>context optimisation</td>
+        <td>Compression, caching, routing in front of <em>every</em> request. Real savings, and it <strong>modifies prompts in flight</strong> — including tool output, which can mangle a command's result you are reading. Document any you install where people will look when a tool behaves strangely.</td></tr>
+      <tr><td><strong>ECC command sets</strong></td><td>command libraries</td>
+        <td>Large collections of ready-made commands. Two traps: they usually install to a <strong>home directory</strong>, so nobody else on the team has them and results are not reproducible; and some depend on <em>other</em> model CLIs being installed — check before relying on one, or it fails at the moment you need it.</td></tr>
     </tbody>
   </table>
+  <div class="box rule">
+    <div class="t">◆ Adopt in this order</div>
+    <p>
+      <strong>Process skills first</strong> (they change how work is decomposed), <strong>memory
+      second</strong> (it stops rediscovery), <strong>code intelligence third</strong> (it scopes
+      testing), then a <strong>different-lineage reviewer</strong>. Planning packs and UI generators are
+      valuable but replaceable; the first four change the shape of the work.
+    </p>
+  </div>
 
 </section>
 
 <section class="page-break">
-  <h2><span class="num">12</span>What this pattern cannot give you</h2>
+  <h2><span class="num">12</span>Walkthrough — one feature, design to merged PR</h2>
+  <div class="h2rule"></div>
+  <p class="lede">
+    The controls in isolation are easy to agree with and hard to picture. Here they are in sequence, on
+    one feature, with the decision points that actually come up.
+  </p>
+
+  <h3>Step 0 — before anything</h3>
+  <ol>
+    <li><strong>Branch.</strong> Never work on the default branch.</li>
+    <li><strong>Export credentials into the shell you will start the agent from.</strong> Tool servers read them from the process environment; a <code>.env</code> file nothing sources leaves every server unauthenticated while looking configured.</li>
+    <li><strong>Ask whether this is already solved.</strong> If you have cross-session memory, one query is cheaper than rediscovering a decision from three weeks ago.</li>
+  </ol>
+
+  <h3>Step 1 — Ground, and quote the requirement</h3>
+  <p>
+    Find the written requirement that governs the work and <strong>copy the exact sentence</strong>. Not
+    a paraphrase — a paraphrase is where the misreading enters, and in a commit message six months later
+    it is indistinguishable from the real thing.
+  </p>
+  <p>
+    Check whether a later decision superseded it. Building correctly against an overridden rule produces
+    confidently wrong code <em>with a citation attached</em>, which is harder to catch than plain error.
+  </p>
+  <div class="box warn">
+    <div class="t">✗ The branch point that decides everything downstream</div>
+    <p>
+      <strong>If the requirement does not settle the question, stop.</strong> Record a decision row with
+      its options and what differs in the code, open the issue, and pick up other work. Do not choose the
+      sensible option — an agent will always produce one, and once it is in the code it is
+      indistinguishable from a decision somebody made.
+    </p>
+  </div>
+
+  <h3>Steps 2 and 3 — Plan, and review the plan before code exists</h3>
+  <p>
+    For anything beyond a small change, produce a phased plan with verification checkpoints. Use the code
+    graph to compute <strong>blast radius first</strong>: what calls the thing you are about to change,
+    and what breaks if it moves. That call graph <em>is</em> your test scope — it is the difference
+    between testing what you wrote and testing what you affected.
+  </p>
+  <p>
+    Then have the architecture lens review <strong>the plan</strong>. This is the cheapest place in the
+    whole sequence to catch a boundary violation, because nothing has been built yet.
+  </p>
+
+  <h3>Step 4 — Implement, test first, with the quote in the test</h3>
+  <pre><code>RED      write the failing test, with the QUOTED requirement in a comment
+         run it — watch it fail. A test you have not seen fail proves nothing.
+GREEN    the minimum implementation that satisfies it
+REFACTOR keep it green</code></pre>
+  <div class="box key">
+    <div class="t">◆ Why the quote goes in the test, not just the commit</div>
+    <p>
+      Test-first by the same agent that writes the code is <em>still</em> self-confirmation if the
+      requirement was misread: the red test encodes the same misunderstanding the green code satisfies.
+      Encoding the <strong>quoted text</strong> rather than your restatement is what makes a misreading
+      visible to the next reader — and to the blind conformance author in step 5.
+    </p>
+  </div>
+  <p>
+    If the work adds a module, its metadata and registry row come <strong>before</strong> the code, so
+    that an unregistered module fails the build rather than an eventual review.
+  </p>
+
+  <h3>Step 5 — Verify, in cost order</h3>
+  <table>
+    <thead><tr><th style="width:26%">Control</th><th>When, and what a bad result means</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Structural gates</strong></td><td>Every commit — they cost a fraction of a second. A failure is a shape problem: something in the wrong place, a missing row.</td></tr>
+      <tr><td><strong>Property tests</strong></td><td>Whenever the change touches a law rather than a case. A failure hands you the minimal counterexample.</td></tr>
+      <tr><td><strong>Mutation</strong></td><td>Before the PR. <strong>A surviving mutant is a missing assertion</strong> — add the assertion. Never lower the floor.</td></tr>
+      <tr><td><strong>Fault injection</strong></td><td>For every fail-closed path. If you have not built this yet, <strong>say so</strong> rather than implying coverage.</td></tr>
+      <tr><td><strong>Blind conformance</strong></td><td>For anything agent-authored where the requirement is subtle. <strong>A disagreement is a finding for a human</strong> — you do not resolve it, because your reading is what is in question.</td></tr>
+    </tbody>
+  </table>
+  <p>
+    Then run the orchestrator once and <strong>commit the evidence file</strong>. Evidence has to outlive
+    the terminal that produced it, and a record written at PR time is more honest than one reconstructed
+    later.
+  </p>
+  <div class="box rule">
+    <div class="t">◆ When a gate fails, there are exactly three legitimate moves</div>
+    <p>
+      <strong>Fix the code</strong> (usually right). <strong>Fix the gate as its own change</strong>, with
+      its own reasoning and its own test — never while making your change pass. Or <strong>record a
+      decision</strong> and route around it. Lowering a threshold is not on the list.
+    </p>
+  </div>
+
+  <h3>Step 6 — Review, both kinds of independence</h3>
+  <p>
+    Run the narrow lenses in parallel — locally, where it is free and fast. Then run a
+    <strong>different-family</strong> reviewer, which is a different control rather than more of the same:
+    the lenses give you diversity of <em>attention</em>, the other family gives you diversity of
+    <em>failure</em>.
+  </p>
+  <p>
+    Record every finding in the PR as acted-on or dismissed with a reason. If a pass could not run —
+    quota, missing tool, wrong environment — <strong>say that it was skipped</strong> rather than
+    omitting it silently. An absent review and a clean review look identical in a PR body otherwise.
+  </p>
+
+  <h3>Step 7 — Raise the PR, and stop</h3>
+  <p>
+    <strong>You do not merge your own work.</strong> Then write the implementation record: the quoted
+    requirement, what was built, <strong>what each control proves</strong>, and what you deliberately did
+    not do.
+  </p>
+  <p>
+    That last part is the one people skip and the one that makes the rest believable. A record claiming a
+    control that never ran is worse than one admitting a gap — because somebody will rely on it.
+  </p>
+
+  <h3>What the sequence costs, honestly</h3>
+  <table>
+    <thead><tr><th style="width:26%">Step</th><th>Marginal cost once set up</th></tr></thead>
+    <tbody>
+      <tr><td>Grounding + quote</td><td>Minutes, and it removes the most expensive class of rework there is.</td></tr>
+      <tr><td>Plan review</td><td>Minutes. Catches boundary problems while they are still free.</td></tr>
+      <tr><td>Gates</td><td>Sub-second. Effectively free.</td></tr>
+      <tr><td>Property + mutation</td><td>Minutes per package. The main recurring cost, and the main source of real findings.</td></tr>
+      <tr><td>Blind conformance</td><td>Expensive. Reserve it for subtle requirements and safety-bearing code.</td></tr>
+      <tr><td>Two review passes</td><td>Minutes, mostly waiting. Run the local one first — it is free.</td></tr>
+      <tr><td>The record</td><td>Ten minutes, and it is what makes the work auditable a year later.</td></tr>
+    </tbody>
+  </table>
+  <p>
+    <strong>The sequence is not all-or-nothing.</strong> A team doing only grounding, gates and mutation
+    already has most of the value. Add the rest as the cost of a mistake rises.
+  </p>
+</section>
+
+<section class="page-break">
+  <h2><span class="num">13</span>What this pattern cannot give you</h2>
   <div class="h2rule"></div>
 
   <p class="lede">
