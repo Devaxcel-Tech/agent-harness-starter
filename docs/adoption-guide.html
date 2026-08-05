@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Adopting the Harness — Setup Guide</title>
+<link rel="stylesheet" href="doc.css">
+</head>
+<body>
+
+<div class="cover">
+ <div class="bleed"></div>
+ <div class="body">
+  <div class="eyebrow">Setup guide · works on any git repository</div>
+  <h1>Adopting the Harness</h1>
+  <div class="deck">
+    Install it in stages, smallest first. Each stage is useful on its own, and nothing later depends on
+    you having finished everything earlier.
+  </div>
+
+  <div class="verdict">
+    <div class="label">◆ Start here if you only have an afternoon</div>
+    <p>
+      Do <strong>Stage 0</strong> and <strong>Stage 1</strong>. Stage 0 is a settings change with no
+      code and it is the difference between having controls and having suggestions. Stage 1 is one
+      small file that changes how every check you ever write behaves. Everything after that is
+      optional and incremental.
+    </p>
+  </div>
+
+  <div class="spacer"></div>
+
+  <dl class="meta">
+    <div><dt>Requires</dt><dd>Git · Python 3 · CI</dd></div>
+    <div><dt>Language</dt><dd>Any — gates are language-agnostic</dd></div>
+    <div><dt>Companion</dt><dd>Pattern Handbook (the why)</dd></div>
+  </dl>
+ </div>
+</div>
+
+<section>
+  <h2><span class="num">00</span>The stages, and what each buys you</h2>
+  <div class="h2rule"></div>
+
+  <table>
+    <thead><tr><th style="width:8%">Stage</th><th style="width:26%">What you add</th><th>What it buys</th></tr></thead>
+    <tbody>
+      <tr><td><strong>0</strong></td><td>Branch protection</td><td><strong>Everything else becomes binding.</strong> Without it every control below only advises.</td></tr>
+      <tr><td><strong>1</strong></td><td>The exit-code contract</td><td>A check that could not run stops reading as a pass.</td></tr>
+      <tr><td><strong>2</strong></td><td>Your first gate + its fault suite</td><td>One rule enforced, and proof the enforcement works.</td></tr>
+      <tr><td><strong>3</strong></td><td>The decision register</td><td>Blocked questions get recorded instead of guessed.</td></tr>
+      <tr><td><strong>4</strong></td><td>Pre-commit hook + CI wiring</td><td>The gates actually run, in both places.</td></tr>
+      <tr><td><strong>5</strong></td><td>Secret scanning</td><td>A credential is caught before it becomes permanent.</td></tr>
+      <tr><td><strong>6</strong></td><td>Mutation testing</td><td>A measure of verification rather than execution.</td></tr>
+      <tr><td><strong>7</strong></td><td>Trigger gates</td><td>Controls you will need later start failing when they start mattering.</td></tr>
+      <tr><td><strong>8</strong></td><td>Drift protection</td><td>Shared files across repositories stop rotting silently.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>What is in the kit</h3>
+  <pre><code>tools/gates/
+  harness.py                        the exit-code contract (Stage 1)
+  check_decisions.py                the decision register gate (Stage 3)
+  check_vendored_drift.py           shared-file drift (Stage 8)
+  check_mutation_applicability.py   a worked trigger gate (Stage 7)
+  check_gates_test.py               fault injection for all of the above (Stage 2)
+  expected-gates.txt                the register of gates that must exist
+tools/qa/
+  run-qa.sh                         runs the floor, writes a durable record
+docs/
+  DECISIONS.md                      an empty register with its schema
+.githooks/pre-commit                discovers and runs every gate
+.github/workflows/                  gates + secret scanning
+.gitleaks.toml                      secret-scanning config
+examples/vendored.json              template for the drift manifest</code></pre>
+  <p>
+    No third-party Python packages, deliberately. A gate that needs <code>pip install</code> to work has
+    acquired a way to fail that has nothing to do with the property it checks — and that failure looks
+    identical to the property being broken.
+  </p>
+</section>
+
+<section class="page-break">
+  <h2><span class="num">01</span>Stage 0 — branch protection first</h2>
+  <div class="h2rule"></div>
+
+  <div class="box warn">
+    <div class="t">✗ Do this before writing a single gate</div>
+    <p>
+      Every control in this kit is advisory until your host enforces it. Skip this stage and you will
+      build a careful harness that nothing obeys — which is measurably what happens. In the
+      implementation this kit came from, before protection existed: <strong>134 of 134 changes merged by
+      their own author, zero approvals ever recorded, median 39 seconds from open to merge.</strong>
+      The gates were good. Nothing ran them.
+    </p>
+  </div>
+
+  <h3>Configure on your default branch</h3>
+  <table>
+    <thead><tr><th style="width:36%">Setting</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Require status checks to pass</strong></td><td>Name each gate job explicitly. A check that is not required is a suggestion.</td></tr>
+      <tr><td><strong>Require at least one approving review</strong></td><td>Two if you can. With agents, prefer reviewers of a <em>different model family</em> from the author.</td></tr>
+      <tr><td><strong>Dismiss stale approvals on push</strong></td><td>Otherwise an approval covers code nobody approved.</td></tr>
+      <tr><td><strong>Do not allow bypass</strong></td><td>Including for administrators. An exception used once becomes the route.</td></tr>
+      <tr><td><strong>Require a linear history</strong> <em>(optional)</em></td><td>Makes "what actually landed" answerable without archaeology.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Verify it rather than assuming it</h3>
+  <pre><code># GitHub: confirm protection exists and lists your checks
+gh api repos/&lt;org&gt;/&lt;repo&gt;/branches/main/protection
+
+# "Branch not protected" means Stage 0 is not done, whatever the settings page shows.</code></pre>
+
+  <h3>Add a code owners file while you are here</h3>
+  <p>
+    It routes review by path. One line per area of risk. <strong>It does nothing until protection
+    requires code-owner review</strong> — worth knowing, because a code owners file that nobody is
+    required to satisfy reads like a control and is not one. If you are a single maintainer, write
+    yourself and say in a comment that it is a placeholder; inventing team handles that do not exist
+    produces silently broken review requests.
+  </p>
+</section>
+
+<section class="page-break">
+  <h2><span class="num">02</span>Stage 1 — the exit-code contract</h2>
+  <div class="h2rule"></div>
+
+  <p class="lede">
+    One file, no dependencies, and it changes the shape of every check you write afterwards. Copy
+    <code>tools/gates/harness.py</code> as-is.
+  </p>
+
+  <table>
+    <thead><tr><th style="width:12%">Exit</th><th style="width:22%">Means</th><th>Use it when</th></tr></thead>
+    <tbody>
+      <tr><td><strong>0</strong></td><td>Verified</td><td>The check ran and the property holds.</td></tr>
+      <tr><td><strong>1</strong></td><td>Violated</td><td>The check ran and the property is broken.</td></tr>
+      <tr><td><strong>2</strong></td><td>Could not run</td><td>A tool was missing, a credential unset, a service down. <strong>Not a pass.</strong></td></tr>
+      <tr><td><strong>3</strong></td><td>Incomplete</td><td>It ran, but part of what it should cover was unreachable — so that part is <em>unproven</em>. <strong>Not a pass.</strong></td></tr>
+    </tbody>
+  </table>
+
+  <h3>Then audit what you already have</h3>
+  <p>Look for these three shapes in existing scripts and CI, and fix them:</p>
+  <table class="cmd">
+    <thead><tr><th>Found</th><th>Change to</th></tr></thead>
+    <tbody>
+      <tr><td><code>some-check || true</code></td><td>Let it fail. If it genuinely may fail, mark it advisory <em>deliberately</em> and say why.</td></tr>
+      <tr><td><code>if ! command -v tool; then exit 0; fi</code></td><td><code>exit 2</code> — a missing tool means no verdict, not a good one.</td></tr>
+      <tr><td>A check whose partial coverage returns 0</td><td><code>exit 3</code>, and name what went unchecked.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="box key">
+    <div class="t">◆ Enforce it in review, not just in code</div>
+    <p>
+      The contract is only worth having if callers respect it. The question to ask of any new check is
+      <strong>"what does this return when it cannot do its job?"</strong> If the answer is 0, the check
+      will eventually go quiet and nobody will notice.
+    </p>
+  </div>
+</section>
+
+<section class="page-break">
+  <h2><span class="num">03</span>Stage 2 — your first gate, and its fault suite</h2>
+  <div class="h2rule"></div>
+
+  <p class="lede">
+    Pick the rule you would most hate to see broken. Write the smallest check that catches it. Then —
+    before trusting it — write the test that proves it can fail.
+  </p>
+
+  <h3>The gate</h3>
+  <pre><code>#!/usr/bin/env python3
+"""One-line statement of the property. Then WHY it matters — the comment that
+saves the next person from re-deriving your reasoning."""
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from harness import VERIFIED, VIOLATED, CANNOT_RUN, repo_root, report
+
+ROOT = repo_root()
+
+def main() -> int:
+    if not (ROOT / "some/required/input").exists():
+        return report("my gate", CANNOT_RUN,
+                      violations=["the input this checks is absent"])
+    problems = [...]                      # your actual check
+    if problems:
+        return report("my gate", VIOLATED, violations=problems)
+    return report("my gate", VERIFIED, verified=["what was checked, and how much"])
+
+if __name__ == "__main__":
+    sys.exit(main())</code></pre>
+
+  <h3>The fault suite — the part people skip</h3>
+  <div class="box key">
+    <div class="t">◆ Why you cannot skip it</div>
+    <p>
+      <strong>A gate that always passes is indistinguishable from a codebase that is always
+      correct.</strong> The output is identical. A typo in a glob or a swallowed exception produces a
+      check that is green forever, and nothing about green invites suspicion.
+    </p>
+  </div>
+  <p>Four requirements, each earned from a real failure:</p>
+  <table>
+    <thead><tr><th style="width:30%">Requirement</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Make the violation real</strong></td><td>In a temporary directory, create the actual bad condition. A mocked violation proves the mock.</td></tr>
+      <tr><td><strong>Assert the exact exit code</strong></td><td>1 and 3 are different claims. "Any failure" passes while your gate conflates them.</td></tr>
+      <tr><td><strong>Include negative cases</strong></td><td>A gate that fires on everything gets disabled within a week.</td></tr>
+      <tr><td><strong>Run it even when the gate is red</strong></td><td>That is exactly when "is the gate still sound?" matters.</td></tr>
+    </tbody>
+  </table>
+
+  <p>
+    <code>tools/gates/check_gates_test.py</code> in this kit is a working example covering 22 cases
+    across three gates. Run it:
+  </p>
+  <pre><code>python3 tools/gates/check_gates_test.py</code></pre>
+  <p>
+    When first run against this kit's own gates it found <strong>seven real defects</strong> — every one
+    a silent pass or a mis-report, and none visible by reading. Two are worth knowing before you write
+    your own: a source scan that allow-listed four directory names silently ignored code anywhere else,
+    and <strong>fixing that created the opposite bug</strong>, where the harness counted its own scripts
+    as product source. Fixing a silent pass in one direction opened one in the other — which is the real
+    argument for the suite.
+  </p>
+</section>
+
+<section class="page-break">
+  <h2><span class="num">04</span>Stage 3 — the decision register</h2>
+  <div class="h2rule"></div>
+
+  <p class="lede">
+    Copy <code>docs/DECISIONS.md</code> and <code>tools/gates/check_decisions.py</code>. The file starts
+    empty, and an empty register passes — the gate says it validated <em>zero rows</em> rather than
+    reporting a pass as though it had checked something.
+  </p>
+
+  <h3>Tailor these three constants</h3>
+  <table class="cmd">
+    <thead><tr><th>Constant</th><th>Change to</th></tr></thead>
+    <tbody>
+      <tr><td><code>ID_PREFIX</code></td><td>Your convention. <code>DEC</code>, <code>ADR</code>, <code>OPEN</code> — anything, as long as it is stable, because these ids get cited.</td></tr>
+      <tr><td><code>REQUIRED_FIELDS_OPEN</code></td><td>Add fields your team needs. <strong>Do not remove the issue link or the code-difference field</strong> — they are what make the register work.</td></tr>
+      <tr><td><code>CITATION_GLOBS</code></td><td>Where you write documents that might cite a decision.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="box rule">
+    <div class="t">◆ Tailoring versus weakening</div>
+    <p>
+      Adding a field is tailoring. Removing a check because a row fails it is <strong>deleting the
+      finding</strong>. The distinction is worth stating out loud in your contributing guide, because
+      the two look identical in a diff.
+    </p>
+  </div>
+
+  <h3>Writing a row people can act on</h3>
+  <p>The two fields that decide whether the register is useful:</p>
+  <ul>
+    <li><strong>Issue link.</strong> This is the delivery mechanism — the tracker's assignment notification is what actually reaches a human. A row without one has told nobody anything.</li>
+    <li><strong>What differs in the code.</strong> Name what would be <em>physically different</em> under each option, with a real path or symbol. If you cannot, this is a task, not a decision, and the gate rejects it. That test is what stops the register filling with to-do items.</li>
+  </ul>
+
+  <h3>Then use it, which is the hard part</h3>
+  <p>
+    The register only works if "stop and record" beats "pick the sensible option". Make it explicit in
+    your agent instructions and your contributing guide: <strong>if the requirement does not settle it,
+    record a decision and route around it.</strong> An agent will always produce a confident answer, so
+    this has to be a stated rule rather than an assumed instinct.
+  </p>
+</section>
+
+<section class="page-break">
+  <h2><span class="num">05</span>Stages 4 and 5 — wiring, and secret scanning</h2>
+  <div class="h2rule"></div>
+
+  <h3>Stage 4 — make the gates actually run</h3>
+  <table class="cmd">
+    <thead><tr><th>Command</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td><code>git config core.hooksPath .githooks</code></td><td>Opt in to the pre-commit hook. It <strong>discovers</strong> gates — every <code>check_*.py</code> that is not a test — so a new gate joins the moment it lands.</td></tr>
+      <tr><td><code>bash tools/qa/run-qa.sh</code></td><td>Runs the whole floor and writes a durable record to <code>tools/qa/evidence/latest.md</code>. <strong>Commit that file</strong> — evidence must outlive the terminal.</td></tr>
+    </tbody>
+  </table>
+  <p>
+    Copy <code>.github/workflows/gates.yml</code> for CI. Note the <code>if: ${{ !cancelled() }}</code>
+    on every step after the first: without it, one failing check silently skips the rest, and a reader
+    cannot tell a check that passed from one that never ran.
+  </p>
+
+  <div class="box">
+    <div class="t">◆ Why there is a register of expected gates</div>
+    <p>
+      Discovery has one blind spot: it cannot tell <em>"this gate does not exist"</em> from <em>"this
+      gate was deleted"</em>. A run that reports green because it found nothing to run is the same
+      defect as a report recording NOT RUN as measured. <code>expected-gates.txt</code> closes it — a
+      name listed there and missing from the checkout blocks. Land a gate and its row in the same
+      change.
+    </p>
+  </div>
+
+  <p>
+    <strong>The hook is a convenience, not a control.</strong> <code>--no-verify</code> skips it and
+    every developer has that flag. It catches the honest mistake where it is cheapest to fix, and stops
+    nothing determined. That is Stage 0's job.
+  </p>
+
+  <h3>Stage 5 — secret scanning</h3>
+  <p>
+    Copy <code>.gitleaks.toml</code> and <code>.github/workflows/secret-scan.yml</code>. Three details
+    that matter more than the tool choice:
+  </p>
+  <table>
+    <thead><tr><th style="width:26%">Detail</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Scan full history</strong></td><td>A shallow clone scans only the tip and reports "no leaks" for a repo it barely looked at.</td></tr>
+      <tr><td><strong>Always redact</strong></td><td>Without it, a detected secret is printed into a CI log — turning the detector into a <em>second</em> disclosure channel. File, line and rule are still reported, which is all you need to fix it.</td></tr>
+      <tr><td><strong>Never allowlist by value</strong></td><td>Suppressing a specific string is how a real credential gets permanently whitelisted by someone in a hurry, invisibly. Allowlist by <em>path</em>, with a comment saying why.</td></tr>
+    </tbody>
+  </table>
+  <p>
+    And do <strong>not</strong> allowlist a file that legitimately holds live credentials. Git-ignore it
+    instead. If someone force-adds it, the scan must fire — that is the entire point.
+  </p>
+  <p>
+    Verify it works by proving it fires: commit a randomly generated fake credential to a tracked file
+    on a throwaway branch, confirm a non-zero exit, then discard the branch. An unverified scanner is a
+    scanner you are trusting on faith.
+  </p>
+</section>
+
+<section class="page-break">
+  <h2><span class="num">06</span>Stages 6 to 8 — measurement, triggers, drift</h2>
+  <div class="h2rule"></div>
+
+  <h3>Stage 6 — mutation testing, replacing your coverage target</h3>
+  <p>
+    Pick your language's tool, configure it for <strong>one</strong> package, and set a floor. Then
+    <strong>delete your line-coverage gate</strong> — keeping both means the weaker one still shapes
+    behaviour, and coverage actively rewards assertion-free tests.
+  </p>
+  <table>
+    <thead><tr><th style="width:26%">Rule</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td><strong>A surviving mutant is a missing assertion</strong></td><td>Add the assertion. Do not lower the floor.</td></tr>
+      <tr><td><strong>Quote the denominator</strong></td><td>"99%" can be nearly meaningless. Say how many mutants were actually evaluated, and how many were excluded and why.</td></tr>
+      <tr><td><strong>Refuse to emit a score from an empty run</strong></td><td>If everything was excluded, there is no score. A number derived from nothing is worse than no number, because it looks authoritative.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Stage 7 — trigger gates for controls you do not need yet</h3>
+  <p>
+    Use <code>check_mutation_applicability.py</code> as the worked example. The shape: distinguish
+    <strong>not applicable</strong> (nothing to measure — passes, <em>and names its trigger</em>) from
+    <strong>unobtainable</strong> (something to measure and no way to measure it — fails).
+  </p>
+  <p>
+    Test it as a state machine, not a single run — add the thing that should trip it, confirm it goes
+    red, remove it, confirm it goes green. A trigger you have not watched fire is not a trigger.
+  </p>
+  <p>
+    Good candidates: accessibility checks (trigger: first user-facing surface), load tests (first
+    served traffic), migration safety (first schema), licence scanning (first third-party dependency).
+    Each is normally a checklist item nobody actions.
+  </p>
+
+  <h3>Stage 8 — drift protection, when a second repository appears</h3>
+  <p>
+    Copy <code>examples/vendored.json</code> to <code>tools/gates/vendored.json</code> and fill it in.
+    Until that file exists the gate reports <em>not applicable</em> and passes, so a single-repo project
+    is never nagged.
+  </p>
+  <table>
+    <thead><tr><th style="width:26%">Rule</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Keep copies byte-identical</strong></td><td>A file adapted locally is a file nobody can diff. Put local context in a document, never in the file.</td></tr>
+      <tr><td><strong>Change upstream, then re-copy</strong></td><td>Never keep a local edit and re-hash it — that is how a fork becomes permanent.</td></tr>
+      <tr><td><strong>Say what a pass means</strong></td><td><em>Unchanged since copied</em>, not <em>up to date</em>. Detecting upstream moving ahead needs network access and a credential.</td></tr>
+      <tr><td><strong>Record the copying as a decision</strong></td><td>It is a workaround for not having a published package. Name it in the register or you have chosen by default.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section class="page-break">
+  <h2><span class="num">07</span>Verifying your installation</h2>
+  <div class="h2rule"></div>
+
+  <p class="lede">
+    Run these in order. Every one should behave as described — and if one does not, that is a finding
+    about your setup rather than something to work around.
+  </p>
+
+  <table class="cmd">
+    <thead><tr><th>Command</th><th style="width:11%">Expect</th><th>Meaning</th></tr></thead>
+    <tbody>
+      <tr><td><code>python3 tools/gates/check_gates_test.py</code></td><td><strong>0</strong></td><td>Every gate fires on a real violation and stays quiet otherwise. <strong>Run this first</strong> — it validates the validators.</td></tr>
+      <tr><td><code>python3 tools/gates/check_decisions.py</code></td><td><strong>0</strong></td><td>On an empty register, says it validated zero rows.</td></tr>
+      <tr><td><code>python3 tools/gates/check_mutation_applicability.py</code></td><td><strong>0</strong> or <strong>1</strong></td><td>0 if you have no source matching the globs (check the globs are right — a scan matching nothing looks like a clean project); 1 if you have source and no mutation config, which is the correct verdict until Stage 6.</td></tr>
+      <tr><td><code>python3 tools/gates/check_vendored_drift.py</code></td><td><strong>0</strong></td><td>"Not applicable" until you create the manifest.</td></tr>
+      <tr><td><code>bash tools/qa/run-qa.sh</code></td><td><strong>0</strong> or <strong>1</strong></td><td>Writes the evidence record either way. Read the table it produces.</td></tr>
+      <tr><td><code>gh api repos/&lt;org&gt;/&lt;repo&gt;/branches/main/protection</code></td><td>JSON</td><td><strong>"Branch not protected" means Stage 0 is not done</strong>, and everything above is advisory.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Then deliberately break something</h3>
+  <p>
+    This is the step that tells you the installation is real. On a throwaway branch:
+  </p>
+  <pre><code># 1. Add a decision row with no issue link      → check_decisions.py must exit 1
+# 2. Add a source file with no mutation config   → applicability gate must exit 1
+# 3. Commit a randomly generated fake credential → secret scan must exit non-zero
+# 4. Delete a gate named in expected-gates.txt   → the hook must refuse the commit
+
+git checkout -b throwaway/verify-harness
+# ... make one of the above changes, observe the failure, then:
+git checkout - && git branch -D throwaway/verify-harness</code></pre>
+  <p>
+    If any of those <em>passes</em>, you have a gate that cannot fail — which is the one outcome worse
+    than having no gate, because it will be believed.
+  </p>
+
+  <h3>Common installation problems</h3>
+  <table>
+    <thead><tr><th style="width:34%">Symptom</th><th>Cause</th></tr></thead>
+    <tbody>
+      <tr><td>A gate passes on an obviously broken repo</td><td>Its globs match nothing. A scan that finds no files is indistinguishable from a clean project — check the file count it reports.</td></tr>
+      <tr><td>The decision gate flags your own documentation</td><td>Prose that <em>discusses</em> an id must write it unnumbered, because a real id in a comment is a citation the scan will rightly demand a row for.</td></tr>
+      <tr><td>CI green, but a check never appears in the log</td><td>An earlier step failed and skipped it. Add the failure-surviving condition.</td></tr>
+      <tr><td>A gate works locally, fails in CI as "could not run"</td><td>The job does not install a tool the gate shells out to. Install it in that job.</td></tr>
+      <tr><td>Everything passes and you do not believe it</td><td>Correct instinct. Go and break something — the paragraph above.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="endnote">
+    <strong>Adopting the Harness — Setup Guide.</strong> Companion to <strong>The Agent Development
+    Harness — Pattern Handbook</strong>, which explains the reasoning behind each control. The reference
+    implementation's own gates were verified by the procedure in §07, and doing so found seven real defects
+    in them — including one created by the fix for another. That is the strongest argument this guide can
+    offer for actually running it.
+  </div>
+</section>
+
+</body>
+</html>

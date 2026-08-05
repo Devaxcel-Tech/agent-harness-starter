@@ -1,0 +1,22 @@
+# Secret scanning configuration.
+#
+# Start from the full default rule set, then subtract only what is PROVABLY a false positive.
+[extend]
+useDefault = true
+
+[allowlist]
+description = """
+Add exclusions here one PATH at a time, each with a comment saying why it is not a real credential.
+
+Two rules that keep this file honest:
+  * NEVER allowlist by VALUE. Suppressing a specific string is how a real credential gets permanently
+    whitelisted by someone in a hurry, and it is invisible in review.
+  * NEVER allowlist a file that legitimately holds live credentials — `.env` and similar. They should
+    be git-ignored instead. If someone force-adds one, the scan MUST fire; that is the whole point.
+
+A submodule or vendored directory belongs here: its contents are not this repo's to fix, and findings
+you cannot remediate teach people to ignore the scanner.
+"""
+paths = [
+  '''^\.gitleaks\.toml$''',
+]

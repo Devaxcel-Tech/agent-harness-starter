@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>The Agent Development Harness — Pattern Handbook</title>
+<link rel="stylesheet" href="doc.css">
+</head>
+<body>
+
+<div class="cover">
+ <div class="bleed"></div>
+ <div class="body">
+  <div class="eyebrow">A reusable pattern · language- and project-agnostic</div>
+  <h1>The Agent Development Harness</h1>
+  <div class="deck">
+    Seven controls that let a team ship at high throughput with AI agents writing most of the code —
+    and the reasoning behind each, so you can adapt them rather than copy them blindly.
+  </div>
+
+  <div class="verdict">
+    <div class="label">◆ The problem this solves</div>
+    <p>
+      When an agent writes the code <em>and</em> its tests, a green suite proves almost nothing: if it
+      misread the requirement, both are wrong in the same direction and agree perfectly. Ordinary
+      quality practice assumes an independent human author somewhere in the loop. Remove that
+      assumption and most of it stops working. <strong>Every control here restores one specific piece
+      of independence that automation took away.</strong>
+    </p>
+  </div>
+
+  <div class="spacer"></div>
+
+  <dl class="meta">
+    <div><dt>Audience</dt><dd>Engineering leads · platform teams</dd></div>
+    <div><dt>Assumes</dt><dd>Git · CI · agents writing code</dd></div>
+    <div><dt>Companion</dt><dd>Adoption Guide</dd></div>
+  </dl>
+ </div>
+</div>
+
+<section>
+  <h2><span class="num">00</span>Contents</h2>
+  <div class="h2rule"></div>
+  <div class="toc">
+    <div><span class="n">01</span>Why ordinary quality practice stops working</div>
+    <div><span class="n">02</span>Four exit codes, not two</div>
+    <div><span class="n">03</span>Never weaken a check to make it pass</div>
+    <div><span class="n">04</span>Every gate ships a test that proves it can fail</div>
+    <div><span class="n">05</span>The decision register — stop, don't guess</div>
+    <div><span class="n">06</span>Trigger gates — catching "not applicable" as it expires</div>
+    <div><span class="n">07</span>Drift protection for shared files</div>
+    <div><span class="n">08</span>Making CI tell the truth</div>
+    <div><span class="n">09</span>Independence controls that outrank tests</div>
+    <div><span class="n">10</span>Grounding, and writing it back</div>
+    <div><span class="n">11</span>What this pattern cannot give you</div>
+  </div>
+
+  <h3>The seven controls, in one table</h3>
+  <table>
+    <thead><tr><th style="width:29%">Control</th><th>The specific failure it removes</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Four exit codes</strong></td><td>A check that never ran reporting as a pass.</td></tr>
+      <tr><td><strong>Gate fault suites</strong></td><td>A gate that cannot fail, which looks identical to a codebase that is always right.</td></tr>
+      <tr><td><strong>Decision register</strong></td><td>A guess in the code becoming indistinguishable from a decision.</td></tr>
+      <tr><td><strong>Trigger gates</strong></td><td>"Not applicable" silently becoming "unmeasured".</td></tr>
+      <tr><td><strong>Drift protection</strong></td><td>Copied shared files rotting with nothing noticing.</td></tr>
+      <tr><td><strong>CI ordering laws</strong></td><td>One check's failure hiding another's verdict.</td></tr>
+      <tr><td><strong>Independence controls</strong></td><td>An author's tests confirming the author's misunderstanding.</td></tr>
+    </tbody>
+  </table>
+  <p>
+    None of this is exotic. What is unusual is treating each as a <em>mechanical</em> control with a
+    failing exit code behind it, rather than a practice you hope people follow. With agents, hope does
+    not scale — an agent will always produce a confident answer, so the discipline has to be
+    enforceable rather than cultural.
+  </p>
+</section>
+
+<section class="page-break">
+  <h2><span class="num">01</span>Why ordinary quality practice stops working</h2>
+  <div class="h2rule"></div>
+
+  <p class="lede">
+    Most quality practice rests on an assumption nobody states: that the person writing the test is,
+    at least partly, a second mind. Automation removes that, and several familiar practices quietly
+    become theatre.
+  </p>
+
+  <table>
+    <thead><tr><th style="width:27%">Practice</th><th>Why it degrades</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Line coverage targets</strong></td>
+        <td>Coverage measures <em>execution</em>, not verification. A test that calls a function and asserts nothing scores full coverage. Assertion-free tests are an agent's default output when asked to raise coverage — so a coverage target actively rewards the failure mode.</td></tr>
+      <tr><td><strong>Code review</strong></td>
+        <td>A reviewer from the same model family shares the author's blind spots. It reads fluently and approves confidently, which is worse than a slow human who is confused and says so.</td></tr>
+      <tr><td><strong>"Write tests first"</strong></td>
+        <td>Still valuable, but no longer sufficient. If the agent misread the requirement, the failing test encodes the <em>same</em> misreading — so red-then-green proves only internal consistency.</td></tr>
+      <tr><td><strong>Documented process</strong></td>
+        <td>An agent reads the document and produces something shaped like compliance. Without a gate, "we follow this process" becomes unfalsifiable.</td></tr>
+      <tr><td><strong>To-do lists of known gaps</strong></td>
+        <td>A gap on a list never forces the issue. Nothing fails, so nothing changes. Two years later the document still says the gap is being worked on.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="box key">
+    <div class="t">◆ The reframing that makes the rest follow</div>
+    <p>
+      Stop asking <em>"is this code correct?"</em> and start asking <strong>"which of my checks could
+      fail, and have I ever seen one do it?"</strong> A check nobody has watched fail is not a
+      control — it is a comment with a CI badge.
+    </p>
+  </div>
+
+  <h3>What throughput actually costs</h3>
+  <p>
+    The reason to build this is not caution — it is speed. Agents can produce more change than a team
+    can review by reading. The only way to accept that volume is to make the machine reject the
+    obvious failures, so human attention goes to the judgement calls. Every control here is chosen
+    because it <strong>replaces an act of reading with an act of measurement</strong>.
+  </p>
+  <p>
+    That is also the honest limit: the harness buys throughput at the cost of building and maintaining
+    the controls. On a small project with one careful author, it is overhead. On a project where
+    agents open a dozen changes a day, it is the only thing standing between you and a codebase nobody
+    can vouch for.
+  </p>
+</section>
+
+<section class="page-break">
+  <h2><span class="num">02</span>Four exit codes, not two</h2>
+  <div class="h2rule"></div>
+  <p class="lede">
+    The single highest-leverage idea here, and the cheapest to adopt. It costs one shared constants
+    file and changes how every other control behaves.
+  </p>
+
+  <table>
+    <thead><tr><th style="width:12%">Exit</th><th style="width:24%">Means</th><th>Why it needs its own code</th></tr></thead>
+    <tbody>
+      <tr><td><strong>0</strong></td><td>Verified</td><td>The check ran and the property holds.</td></tr>
+      <tr><td><strong>1</strong></td><td>Violated</td><td>The check ran and the property is broken.</td></tr>
+      <tr><td><strong>2</strong></td><td>Could not run</td><td>Something it needed was missing, so it reached <em>no verdict</em>. A tool absent, a credential unset, a service down.</td></tr>
+      <tr><td><strong>3</strong></td><td>Incomplete</td><td>It ran, but part of what it should have covered was unreachable — so the property is <em>unproven</em> there, not satisfied.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="box key">
+    <div class="t">◆ Why two and three exist</div>
+    <p>
+      Because <strong>"I checked and it is fine" and "I could not check the important part" look
+      identical from a green badge.</strong> Collapse them into pass/fail and you will eventually ship
+      a control that has never once executed while a dashboard reports it healthy. This is not
+      theoretical — it is the most common way a real quality gate dies, and it dies silently.
+    </p>
+  </div>
+
+  <h3>The rule that follows, and it needs enforcing in review</h3>
+  <p>
+    <strong>Two and three are not passes.</strong> Any caller that treats a non-zero code as success
+    has reintroduced the defect the vocabulary exists to remove. Watch for these three shapes:
+  </p>
+  <ul>
+    <li><code>command || true</code> — swallows every verdict, including real failures.</li>
+    <li><code>continue-on-error: true</code> in CI — makes a control advisory. Sometimes correct, but it must be a decision, not a default.</li>
+    <li>A tool that "handles missing dependencies gracefully" and returns 0. Graceful is good; returning 0 is not. Return 2.</li>
+  </ul>
+
+  <h3>A worked example of exit 3 earning its place</h3>
+  <p>
+    A project had a rule that its security-critical decision code must never depend on a second
+    language. The check queried the build graph for such dependencies and found none — because the
+    package had no source yet. Reporting <strong>0</strong> would have said "the rule holds". It does
+    not hold; it is <em>unproven</em>, because there is nothing to check.
+  </p>
+  <p>
+    Exit 3 states that difference, and the check stays red until real code arrives. The owner ruled it
+    should stay red rather than be softened — which only became possible once the distinction had a
+    name.
+  </p>
+</section>
+
+<section class="page-break">
+  <h2><span class="num">03</span>Never weaken a check to make it pass</h2>
+  <div class="h2rule"></div>
+
+  <p class="lede">
+    Easy to agree with, hard to hold, and the one rule whose violation is nearly invisible in review —
+    because a loosened gate looks exactly like a gate.
+  </p>
+
+  <h3>The five ways it happens</h3>
+  <table>
+    <thead><tr><th style="width:30%">Move</th><th>Why it is the same mistake</th></tr></thead>
+    <tbody>
+      <tr><td>Lower a threshold</td><td>A floor moved to fit today's number is not a floor.</td></tr>
+      <tr><td>Narrow a glob</td><td>A scan that matches nothing passes trivially, and is indistinguishable from a clean project.</td></tr>
+      <tr><td>Add a special case for your own file</td><td>The exemption outlives the reason and nobody re-litigates it.</td></tr>
+      <tr><td>Delete an assertion the change broke</td><td>The assertion was the control.</td></tr>
+      <tr><td>Tag an unrelated test so an empty filter is non-empty</td><td>Turns a known gap into a false pass — worse than the gap.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>What to do instead</h3>
+  <ol>
+    <li><strong>Fix the code.</strong> Usually the gate is right.</li>
+    <li><strong>If the gate is genuinely wrong, that is a finding worth its own change</strong> — with its own reasoning and its own test proving the new behaviour. Fixing a gate <em>while</em> making your own change pass is how a weakening gets waved through.</li>
+    <li><strong>If neither, record a decision</strong> (§5) and route around it.</li>
+  </ol>
+
+  <div class="box warn">
+    <div class="t">✗ Two phrases that should stop a review</div>
+    <p>
+      <em>"This check is too strict for now"</em> and <em>"I'll tighten it again later."</em> Both
+      describe permanently loosening a control while implying it is temporary. If it really is
+      temporary, it needs a recorded decision with the condition that reverses it — otherwise "later"
+      never arrives, and nobody remembers the check was ever stricter.
+    </p>
+  </div>
+
+  <h3>Make the rule visible where it is broken</h3>
+  <p>
+    Put it in the failure message, not only in a contributing guide. Every gate in the reference
+    implementation ends its refusal with a version of: <em>fix the code; do not weaken this check; if
+    the check is wrong, that is its own change.</em> The person about to take the shortcut is reading
+    the error, not the handbook.
+  </p>
+</section>
+
+<section class="page-break">
+  <h2><span class="num">04</span>Every gate ships a test that proves it can fail</h2>
+  <div class="h2rule"></div>
+
+  <p class="lede">
+    If you adopt one thing from this document, adopt this. It is the control that keeps every other
+    control honest, and it is usually missing.
+  </p>
+
+  <div class="box key">
+    <div class="t">◆ The core insight</div>
+    <p>
+      <strong>A gate that always passes is indistinguishable from a codebase that is always
+      correct.</strong> You cannot tell them apart from the output, because the output is identical.
+      A typo in a glob, a swallowed exception, an inverted condition — any of them produce a check
+      that is green forever, and nothing about a green check invites suspicion.
+    </p>
+  </div>
+
+  <h3>What a gate fault suite does</h3>
+  <p>
+    For each gate, in a throwaway copy of a repository, it <strong>makes the violation real</strong> —
+    creates the malformed row, deletes the required field, edits the shared file, commits a fake
+    credential — and asserts the gate's <strong>exact exit code</strong>.
+  </p>
+  <table>
+    <thead><tr><th style="width:30%">Requirement</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Make the violation real</strong></td><td>A mocked violation proves the mock. Create the actual condition on disk.</td></tr>
+      <tr><td><strong>Assert the exact code</strong></td><td>1 and 3 are different claims. A suite accepting "any failure" passes while a gate conflates them — the confusion the codes exist to prevent.</td></tr>
+      <tr><td><strong>Include negative cases</strong></td><td>A gate that fires on everything gets disabled within a week. Prove it stays quiet when it should.</td></tr>
+      <tr><td><strong>Run it even when a gate is red</strong></td><td>When a gate is failing, <em>"is the gate still sound?"</em> is precisely the question worth answering. In CI, guard it so an earlier failure cannot skip it.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>It pays for itself immediately</h3>
+  <p>
+    In the reference implementation the suite found <strong>seven real defects in the gates</strong>,
+    every one of them a silent pass or a mis-report, and none visible by reading the code:
+  </p>
+  <table>
+    <thead><tr><th style="width:34%">Defect</th><th>Why it was invisible</th></tr></thead>
+    <tbody>
+      <tr><td>A gate scanned source for references to decision ids — <strong>including its own documentation</strong>, which used a real id as an example</td><td>It flagged itself. The fix produced a convention worth keeping: prose that <em>discusses</em> an id must write it unnumbered.</td></tr>
+      <tr><td>The example row inside a fenced code block in the gate's own <strong>template</strong> parsed as a real row</td><td>Every fresh adopter would start with a phantom decision, and hit a duplicate-id error the day they added a real one.</td></tr>
+      <tr><td>Only ``` fences were stripped, not <code>~~~</code></td><td>Markdown allows both. A template using tildes reintroduced the bug above.</td></tr>
+      <tr><td>The "what differs in the code" check accepted <code>`.`</code> — a single backticked dot</td><td>The most important field in the register could be satisfied by a gesture.</td></tr>
+      <tr><td>The source scan allow-listed four directory names, so code in <code>internal/</code> was <strong>invisible</strong></td><td>A silent pass on a repository full of code, from the gate whose purpose is catching silent passes. Fixed by inverting to a deny-list by extension.</td></tr>
+      <tr><td>That inversion then counted the harness's <strong>own scripts</strong> as product source</td><td>The harness reported that the harness was unmeasured, forever. Fixing one direction of a scan opened the other.</td></tr>
+      <tr><td>A <strong>crashing</strong> gate exited 1, so the runner reported "the property is broken"</td><td>It sends someone hunting for a defect in the code when the defect is in the gate. A crash is a could-not-run.</td></tr>
+    </tbody>
+  </table>
+  <p>
+    Note the shape of the fifth and sixth together: <strong>fixing a silent pass in one direction
+    created one in the other.</strong> That is the strongest possible argument for the suite — not that
+    it catches mistakes, but that it catches the mistakes your fixes introduce.
+  </p>
+</section>
+
+<section class="page-break">
+  <h2><span class="num">05</span>The decision register — stop, don't guess</h2>
+  <div class="h2rule"></div>
+
+  <div class="box key">
+    <div class="t">◆ In one paragraph</div>
+    <p>
+      When work hits a question the design does not settle, the answer must be <strong>stop and record
+      it</strong>, not <strong>pick the sensible option</strong>. A register holds those questions as
+      numbered rows with the options written down, and work routes around them. It matters more with
+      agents than with people, because an agent will <em>always</em> produce a confident answer — that
+      is what it is for.
+    </p>
+  </div>
+
+  <h3>The cost of guessing, stated precisely</h3>
+  <p>
+    <strong>Once a guess is in the code it is indistinguishable from a decision.</strong> Six months on
+    nobody can tell which lines reflect a deliberate choice and which reflect somebody's Tuesday
+    afternoon. Changing them becomes frightening, because you cannot tell what you might be undoing.
+    The register's whole job is keeping those two categories apart.
+  </p>
+
+  <h3>The fields, and why each is required</h3>
+  <table>
+    <thead><tr><th style="width:25%">Field</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Status</strong></td><td>Open or resolved. Nothing else — a third value means the register has drifted into free text and a reader can no longer tell blocked from settled at a glance.</td></tr>
+      <tr><td><strong>Issue link</strong></td><td><strong>The delivery mechanism.</strong> A row in a file nobody opens has told nobody anything. The tracker's assignment notification is what reaches a human. Most often missing; most expensive when it is.</td></tr>
+      <tr><td><strong>Candidate answers</strong></td><td>The options, labelled. A question is not an answer — a decider must see what they are choosing between without reconstructing it.</td></tr>
+      <tr><td><strong>What differs in the code</strong></td><td><strong>The entry condition</strong>, and the cleverest rule here. See below.</td></tr>
+      <tr><td><strong>Ruling</strong></td><td>Empty until decided, then a durable, findable reference. "We agreed in a meeting" cannot close a row, because a later reader cannot look it up.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="box rule">
+    <div class="t">◆ Why "what differs in the code" is the load-bearing field</div>
+    <p>
+      Name what would be <em>physically different</em> in the codebase under each option. If you
+      cannot, <strong>this is a task, not a decision</strong> — and it does not belong in a decision
+      register.
+    </p>
+    <p>
+      Without this test the register slowly fills with to-do items, and then nobody reads it, and then
+      the one genuinely blocked decision in it is invisible. Gate the field and a task dressed as a
+      decision is rejected automatically.
+    </p>
+  </div>
+
+  <h3>Two rules that seem pedantic and are not</h3>
+  <ul>
+    <li><strong>A number is never reused and never renumbered.</strong> A row keeps its id for life and only its status changes. Renumbering on closure dangles every citation of the old number and frees the number for a different question.</li>
+    <li><strong>Never cite another repository's number.</strong> These numbers are per-repository and they collide. In the reference implementation two repositories each had a <code>-7</code> that turned out to be the <em>same</em> question recorded twice with divergent state, while another's <code>-21</code> had no counterpart at all. Cite by <strong>subject and repository</strong>.</li>
+  </ul>
+
+  <h3>The citation scan</h3>
+  <p>
+    The gate also checks the reverse direction: if any document cites a decision id, a row with that
+    id must exist. <strong>A decision cited but never recorded is the precise failure the register
+    exists to stop</strong> — it is how a question gets discussed, referenced, and never actually
+    answered.
+  </p>
+</section>
+
+<section class="page-break">
+  <h2><span class="num">06</span>Trigger gates — catching "not applicable" as it expires</h2>
+  <div class="h2rule"></div>
+
+  <p class="lede">
+    The subtlest control here, and the one that most often does not exist anywhere. It turns a to-do
+    item into something that fails on its own schedule.
+  </p>
+
+  <h3>The pattern it kills</h3>
+  <p>
+    Someone writes "we should add mutation testing" in a document. It becomes an item on a list. The
+    list is reviewed occasionally and the item is still true, so it stays. <strong>Nothing ever fails,
+    so nothing ever forces the issue.</strong> Two years later the document still claims mutation
+    testing is the coverage metric and no package has ever been measured.
+  </p>
+
+  <h3>The shape of a trigger gate</h3>
+  <p>Distinguish two states that otherwise both look fine:</p>
+  <table>
+    <thead><tr><th style="width:25%">State</th><th>Verdict</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Not applicable</strong></td><td><span class="chip pass">✓ passes</span></td>
+        <td>Nothing to measure — but the gate <strong>states its trigger</strong>, because this stops being true silently.</td></tr>
+      <tr><td><strong>Unobtainable</strong></td><td><span class="chip deny">✗ fails</span></td>
+        <td>There <em>is</em> something to measure and the measurement cannot be produced. A defect.</td></tr>
+    </tbody>
+  </table>
+  <p>
+    The second is the obvious value. <strong>The first is the one that matters more</strong>, because
+    that transition — the day someone adds the first source file to a package that had none — is
+    exactly what nobody is watching for.
+  </p>
+
+  <h3>Verified as a state machine, not a run</h3>
+  <p>
+    A trigger gate is only worth having if the trigger fires. Test it by moving through the states:
+  </p>
+  <pre><code>no source            → exit 0, and the message names the trigger
+add one source file  → exit 1
+remove it            → exit 0
+a TEST file only     → exit 0   (mutating a test is meaningless)</code></pre>
+
+  <h3>Where else the shape applies</h3>
+  <ul>
+    <li><strong>Accessibility checks</strong> — not applicable until the first user-facing surface exists; red the moment one does.</li>
+    <li><strong>Load tests</strong> — not applicable until something serves traffic.</li>
+    <li><strong>Migration safety</strong> — not applicable until there is a schema.</li>
+    <li><strong>Licence scanning</strong> — not applicable until there are third-party dependencies.</li>
+  </ul>
+  <p>
+    In each case the ordinary approach is a checklist item that nobody actions. The trigger gate turns
+    it into a check that begins failing precisely when it starts mattering.
+  </p>
+</section>
+
+<section class="page-break">
+  <h2><span class="num">07</span>Drift protection for shared files</h2>
+  <div class="h2rule"></div>
+
+  <p class="lede">
+    Once you have more than one repository, some files want to be shared. The clean answer is to
+    publish them as a versioned package. Teams rarely start there, so the files get copied — and then
+    they rot.
+  </p>
+
+  <h3>How the rot actually happens</h3>
+  <p>
+    Someone improves the original. The copies keep the old behaviour. Nothing anywhere reports it.
+    Measured in the reference implementation: an upstream change added four lines to a shared review
+    configuration, and <strong>three downstream copies went stale the same day</strong> — in the files
+    that decide how code gets reviewed.
+  </p>
+  <p>
+    Drift protection does not fix that. It makes it <strong>visible</strong>, which is what you can
+    have before the publishing question is settled.
+  </p>
+
+  <h3>The mechanism</h3>
+  <table>
+    <thead><tr><th style="width:26%">Piece</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td><strong>A manifest</strong></td><td>For each copied file: which upstream revision it came from, and its content hash.</td></tr>
+      <tr><td><strong>A gate</strong></td><td>Recomputes each hash and compares. A mismatch means someone edited the copy instead of the original.</td></tr>
+      <tr><td><strong>Two file classes</strong></td><td><strong>Verbatim</strong> — byte-identical, checked by hash. <strong>Templated</strong> — differs by a known substitution, so instead the check confirms the substitution is <em>complete</em>.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="box rule">
+    <div class="t">◆ Keep copies byte-identical, even when a few lines do not apply</div>
+    <p>
+      A file adapted for local taste is a file nobody can diff, and it forks quietly. In the reference
+      implementation four shared files were copied <strong>in full</strong> rather than trimmed, though
+      five lines out of 131 referenced things one repository did not have. Forking a file to adjust 4%
+      of it trades a small correctness gain for undetectable drift. Local context belongs in a
+      document, never in the file.
+    </p>
+  </div>
+
+  <div class="box warn">
+    <div class="t">✗ State the limit in the gate's own output</div>
+    <p>
+      A pass means <strong>unchanged since copied</strong>. It does <strong>not</strong> mean
+      <strong>up to date</strong>. Detecting that upstream has moved ahead requires reading upstream's
+      tree — network access and a credential — and a well-structured upstream cannot push the check
+      either, because it does not depend on its consumers.
+    </p>
+    <p>
+      So <strong>the direction that causes real staleness stays undetected</strong>. Say that where the
+      result is read. A green check that gets over-read is worse than no check.
+    </p>
+  </div>
+
+  <h3>Treat the copying itself as a recorded decision</h3>
+  <p>
+    Hand-copying is a workaround, and workarounds become permanent when nobody names them. Put the
+    publication question in the decision register with its options — publish a package, or keep copying
+    with a drift gate and a staleness check — and what differs in the code under each. Otherwise you
+    have chosen by default, and nobody noticed choosing.
+  </p>
+</section>
+
+<section class="page-break">
+  <h2><span class="num">08</span>Making CI tell the truth</h2>
+  <div class="h2rule"></div>
+
+  <p class="lede">
+    Two properties of CI itself, both easy to violate by accident, both silent when violated. Assert
+    them over the workflow files with a test, because neither is visible from a badge.
+  </p>
+
+  <h3>Law 1 — no verdict may be hidden by an earlier failure</h3>
+  <p>
+    Most CI systems skip the remaining steps of a job as soon as one fails. So if a job runs two
+    <em>independent</em> checks and the first fails, the second is reported as <em>skipped</em> — and
+    a reader cannot tell a check that passed from one that never ran.
+  </p>
+  <p>
+    Where two independent verdicts share a job, every step after the first needs a failure-surviving
+    condition. A step that is a genuine <em>prerequisite</em> of the next is exempt: its failure
+    stopping the job is correct, because the next step could not have run meaningfully anyway.
+  </p>
+  <div class="box">
+    <div class="t">◆ This is not hypothetical</div>
+    <p>
+      When this test was ported into three sibling repositories it found <strong>six violations in each
+      one</strong> — including a case where a gate had been made deliberately red, which meant it was
+      silently skipping <strong>its own fault-injection suite</strong>. The check that proved the gate
+      still worked had stopped running, and nothing said so.
+    </p>
+  </div>
+
+  <h3>Law 2 — a blocking check's tools must be installed in its own job</h3>
+  <p>
+    If a check shells out to a tool, the job running it must install that tool. Handling absence
+    gracefully is not enough: a check that exits "could not run" is honest and still means the property
+    went unverified.
+  </p>
+  <p>
+    The reference implementation had a check that <strong>had never once executed in CI</strong> — no
+    job installed the package manager it needed, so it died on a missing binary, failed first, and hid
+    a second check behind it. It was red for an environment reason, never for the property it checked.
+  </p>
+
+  <h3>One verdict per job, where you can afford it</h3>
+  <p>
+    Splitting independent checks into separate jobs makes Law 1 impossible to violate and each verdict
+    individually readable. It costs job start-up time, so it is a trade rather than a rule — but it is
+    the right default for anything expected to be red for a known reason, so its red cannot mask
+    anything else.
+  </p>
+
+  <h3>Beware the friendly idioms</h3>
+  <table>
+    <thead><tr><th style="width:32%">Idiom</th><th>What it actually does</th></tr></thead>
+    <tbody>
+      <tr><td><code>|| true</code></td><td>Discards every verdict, including real failures.</td></tr>
+      <tr><td><code>continue-on-error</code></td><td>Stops a step failing the job — and does nothing about that step being <em>skipped</em> by an earlier failure. It does not satisfy Law 1.</td></tr>
+      <tr><td>A tag filter matching no tests</td><td>Many runners exit successfully on "no tests found". A documented command that matches nothing therefore reads as a pass while testing nothing.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section class="page-break">
+  <h2><span class="num">09</span>Independence controls that outrank tests</h2>
+  <div class="h2rule"></div>
+
+  <p class="lede">
+    Four controls whose verdict does not depend on whoever wrote the code. Adopt in this order — each
+    is roughly an order of magnitude more work than the one before.
+  </p>
+
+  <table>
+    <thead><tr><th style="width:22%">Control</th><th style="width:14%">Effort</th><th>What it removes</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Mutation testing</strong></td><td>low</td>
+        <td><em>"Who tests the tests?"</em> It breaks your code deliberately and checks whether any test <strong>notices</strong>. A test asserting nothing kills no mutants. <strong>Use this instead of a coverage target, not alongside one.</strong></td></tr>
+      <tr><td><strong>Property tests</strong></td><td>low–medium</td>
+        <td><em>"Try the inputs I would never think of."</em> You state a <strong>law</strong> rather than an example, and the tool generates hundreds of cases, then shrinks any failure to the smallest one that still breaks.</td></tr>
+      <tr><td><strong>A different-lineage reviewer</strong></td><td>medium</td>
+        <td>A reviewer from a different model family does not share the author's blind spots. In the reference implementation the first real use of one found a <strong>factually wrong comment in the very change that introduced it</strong> — a claim about a tool's defaults that the tool's own schema contradicted.</td></tr>
+      <tr><td><strong>Blind conformance tests</strong></td><td>high</td>
+        <td>A second agent writes tests <strong>from the requirement alone</strong>, never reading the implementation. Hand it a signatures-only file so it physically cannot copy your logic.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="box key">
+    <div class="t">◆ The rule that makes blind conformance work</div>
+    <p>
+      <strong>If the two disagree, that is a finding for a human.</strong> The implementer does not
+      resolve it — their reading of the requirement is precisely what is in question. Let the
+      implementer adjudicate and you have rebuilt the single-mind problem with extra steps.
+    </p>
+  </div>
+
+  <h3>Quote a measurement with its denominator</h3>
+  <p>
+    A mutation score of 99% sounds conclusive and can be nearly meaningless. In the reference
+    implementation the real figure was <strong>99.36% over 472 mutants that compiled</strong> — with a
+    further 652 of 1,124 excluded because they did not compile at all.
+  </p>
+  <p>
+    That exclusion is correct: a mutant that cannot compile is not a fault a test could catch, since
+    the compiler rejects it in production too. But <strong>"99.36%" without the denominator invites a
+    conclusion the number does not support.</strong> Make your tooling refuse to emit a score at all
+    when everything was excluded, so an empty run cannot pass as a good one.
+  </p>
+
+  <h3>What to do when a control does not exist yet</h3>
+  <p>
+    Say so, in the place someone would look for its result. The reference implementation documented a
+    fault-injection command in three places; it matched zero tests and exited as success. The honest
+    statement — <em>"no fail-closed behaviour here has been proven to fail closed"</em> — is more
+    useful than a command that looks like proof. And never make an empty filter non-empty by tagging an
+    unrelated test: that converts a known gap into a false pass.
+  </p>
+</section>
+
+<section class="page-break">
+  <h2><span class="num">10</span>Grounding, and writing it back</h2>
+  <div class="h2rule"></div>
+
+  <p class="lede">
+    Two process controls rather than tools. They are what stop an agent inventing requirements, and
+    what stops the reasoning behind a change evaporating the moment it merges.
+  </p>
+
+  <h3>Grounding — quote the requirement, do not paraphrase it</h3>
+  <p>
+    Before writing code, find the written requirement that governs it and <strong>quote it
+    exactly</strong> in the change. This sounds bureaucratic and is not: a paraphrase is where the
+    misreading enters, and a paraphrase in a commit message is indistinguishable from the real thing
+    six months later.
+  </p>
+  <ul>
+    <li><strong>Keep requirements addressable.</strong> Give settled decisions short identifiers so a change can cite one precisely.</li>
+    <li><strong>Check for supersession.</strong> The highest-risk failure is building correctly against a rule that a later decision overrode — it produces confidently wrong code with a citation attached.</li>
+    <li><strong>An index is a router, not a source.</strong> If you generate a summary over your requirements, never implement from the summary. Open the thing it points at.</li>
+    <li><strong>No requirement means halt</strong>, not "use judgement" (§5).</li>
+  </ul>
+
+  <h3>Writing it back — the implementation record</h3>
+  <p>
+    A change is not done when it merges; it is done when someone else can understand why it looks the
+    way it does. One record per change, covering:
+  </p>
+  <table>
+    <thead><tr><th style="width:26%">Section</th><th>Content</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Grounding</strong></td><td>Each requirement, quoted. Which supersessions you checked. An explicit statement that you made no assumptions.</td></tr>
+      <tr><td><strong>Exact implementation</strong></td><td>Files and decisions, precise enough that the next person does not re-derive them. Include approaches you tried and rejected — that is the most expensive knowledge to reconstruct.</td></tr>
+      <tr><td><strong>Test proofs</strong></td><td><strong>What each control proves</strong> — not that it passed. And if a control was not run, <strong>say so here</strong>.</td></tr>
+      <tr><td><strong>Not done</strong></td><td>Deliberate gaps and follow-ups, so the next reader knows what they are looking at.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="box warn">
+    <div class="t">✗ The failure this section exists to prevent</div>
+    <p>
+      A record that lists the tools which ran is not evidence — it is a receipt. <em>"Mutation testing:
+      passed"</em> tells a later reader nothing they can act on. <em>"Mutation 99.36% over 472
+      compilable mutants, so a test noticed almost every change we could make"</em> does.
+    </p>
+    <p>
+      And a record claiming a control that never ran is worse than one admitting a gap, because
+      somebody will rely on it. <strong>Declaring what you did not do is the part that makes the rest
+      believable.</strong>
+    </p>
+  </div>
+</section>
+
+<section class="page-break">
+  <h2><span class="num">11</span>What this pattern cannot give you</h2>
+  <div class="h2rule"></div>
+
+  <p class="lede">
+    Stated plainly, because a pattern document that only lists benefits is the same genre of dishonesty
+    the harness is built to prevent.
+  </p>
+
+  <table>
+    <thead><tr><th style="width:30%">Limit</th><th>What it means in practice</th></tr></thead>
+    <tbody>
+      <tr><td><strong>None of it blocks anything without branch protection</strong></td>
+        <td><strong>The most important line here.</strong> Gates, hooks and review panels all only advise. Until your host is configured to require the checks and forbid bypass, a determined or hurried author merges past every one. In the reference implementation, before protection was configured: <strong>134 of 134 changes merged by their own author, zero approvals ever recorded, median 39 seconds from open to merge.</strong> The harness was excellent and enforced nothing.</td></tr>
+      <tr><td><strong>A hook is a convenience, not a control</strong></td>
+        <td>Anyone can skip it. It catches the honest mistake cheaply. It stops nothing determined.</td></tr>
+      <tr><td><strong>Drift protection is one-directional</strong></td>
+        <td>It catches local edits, not upstream moving ahead — the direction that actually causes staleness (§7).</td></tr>
+      <tr><td><strong>It cannot tell you the requirement was right</strong></td>
+        <td>Every control here checks fidelity to a written requirement. If the requirement is wrong, the harness will help you implement it wrongly with great rigour. That judgement stays human.</td></tr>
+      <tr><td><strong>It has a maintenance cost</strong></td>
+        <td>Gates need their own tests, and those tests need maintaining. On a small project with one careful author this is overhead. It pays off in proportion to how much change you accept without reading all of it.</td></tr>
+      <tr><td><strong>Volume of green is not maturity</strong></td>
+        <td>Fifteen passing tests on a mostly-scaffold project is a low bar. Documents resolving is link-checking, not capability. Read the list of what does <em>not</em> work; that is the honest picture.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Adopt in this order</h3>
+  <ol>
+    <li><strong>Branch protection.</strong> Free, immediate, and without it nothing else binds.</li>
+    <li><strong>Four exit codes.</strong> One small file; changes how everything else behaves.</li>
+    <li><strong>One gate plus its fault suite.</strong> Whichever rule you most fear breaking. Watch it fail once.</li>
+    <li><strong>The decision register.</strong> Cheap, and it starts capturing value the first time someone would otherwise have guessed.</li>
+    <li><strong>Mutation testing on one package</strong>, replacing any coverage target.</li>
+    <li><strong>Trigger gates</strong> for each control you know you will need later.</li>
+    <li><strong>A different-lineage reviewer</strong>, then drift protection when a second repository appears.</li>
+  </ol>
+  <p>
+    Steps 1 and 2 take an afternoon and remove the two failure modes that matter most: nothing binding,
+    and a check that never ran reading as a pass.
+  </p>
+
+  <div class="endnote">
+    <strong>The Agent Development Harness — Pattern Handbook.</strong> A reusable pattern, extracted
+    from a production implementation and stripped of anything project-specific. Every claim about a
+    failure mode in this document is something that happened, not something imagined. Companion
+    document: <strong>Adopting the Harness</strong>, which is the same material as a setup sequence with
+    working code.
+  </div>
+</section>
+
+</body>
+</html>

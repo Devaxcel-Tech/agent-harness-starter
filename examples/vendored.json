@@ -1,0 +1,15 @@
+{
+  "_comment": "Template for tools/gates/vendored.json. Copy it there and fill it in when you first copy a shared file in from another repository. Regenerate hashes whenever you re-copy — and re-copy rather than editing locally.",
+  "upstream": "your-org/your-upstream-repo",
+  "revision": "the commit these files were copied from",
+  "upstream_marker": "UPSTREAM-SLUG",
+  "_marker_note": "A string that appears in the upstream original and must NOT survive templating. Usually the upstream repo or org name. The gate uses it to prove a substitution was completed.",
+  "verbatim": {
+    "_note": "path -> sha256. Byte-identical to upstream, deliberately, so drift is detectable.",
+    ".github/workflows/secret-scan.yml": "REPLACE_WITH_SHA256"
+  },
+  "templated": {
+    "_note": "path -> rule. Differs from upstream by a known substitution; checked for completeness.",
+    "docs/REVIEW.md": { "rule": "upstream slug replaced with this repo's" }
+  }
+}

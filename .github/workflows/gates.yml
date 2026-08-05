@@ -1,0 +1,32 @@
+name: gates
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+
+jobs:
+  # ONE VERDICT PER JOB, and where two share a job every step after the first carries a
+  # failure-surviving guard. GitHub skips the rest of a job as soon as one step fails, so without the
+  # guard a later check is reported "skipped" — and a reader cannot tell a check that passed from one
+  # that never ran. That is not a hypothetical; it is the most common way a CI signal goes quietly
+  # dead.
+  gates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Structural gates
+        if: ${{ !cancelled() }}
+        run: bash tools/qa/run-qa.sh
+      # Judges the GATES, not the code — so it runs even when a gate is red, which is exactly when
+      # "is the gate still sound?" is the question worth answering.
+      - name: Gate fault injection
+        if: ${{ !cancelled() }}
+        run: python3 tools/gates/check_gates_test.py
+      - name: Upload the evidence record
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: qa-evidence
+          path: tools/qa/evidence/latest.md

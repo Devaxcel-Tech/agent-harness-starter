@@ -1,0 +1,12 @@
+# Gates that MUST be present in a checkout.
+#
+# WHY THIS FILE EXISTS. The pre-commit hook and the CI runner DISCOVER gates rather than hardcoding
+# them, so a new gate joins the floor the moment it lands. But discovery cannot tell "this gate does
+# not exist" from "this gate was deleted" — and a run that reports green because it found nothing to
+# run is the same defect as a report recording NOT RUN as measured. This register is the other half:
+# a name listed here and missing from the checkout is a COULD-NOT-RUN, and it blocks.
+#
+# ADDING A GATE: land the script and its row here in the SAME change.
+check_decisions.py
+check_vendored_drift.py
+check_mutation_applicability.py

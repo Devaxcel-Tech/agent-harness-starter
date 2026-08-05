@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+# Run the fast gates before a commit is created.
+#
+# WHAT THIS IS NOT, said first because it is the part people get wrong: **a hook is a convenience,
+# not a control.** `--no-verify` skips it and every developer has that flag. It is not a substitute
+# for branch protection, and installing it does not close that gap. It catches the honest mistake on
+# your machine, where it is cheapest to fix. It stops nothing determined.
+#
+# INSTALL (opt-in, one line, per clone):   git config core.hooksPath .githooks
+# UNINSTALL:                               git config --unset core.hooksPath
+# SKIP ONCE (fine on your own branch):     git commit --no-verify
+#
+# GATES ARE DISCOVERED, not listed: every `tools/gates/check_*.py` that is not a `*_test.py` runs.
+# A new gate joins the moment it lands, so nobody has to remember to add it here.
+#
+# BUT DISCOVERY ALONE IS NOT ENOUGH, and this is the subtle part. Discovery cannot tell "this gate
+# does not exist" from "this gate was deleted" — and a hook that reports success because it found
+# nothing to run is the same defect as a report that records NOT RUN as measured. So
+# `tools/gates/expected-gates.txt` lists the gates that MUST be present, and a listed gate missing
+# from the checkout blocks the commit.
+set -uo pipefail
+
+root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+cd "$root" || exit 0
+
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "pre-commit: python3 not found, so no gate could run." >&2
+  echo "            This is a COULD-NOT-RUN, not a pass." >&2
+  exit 1
+fi
+
+failed=0
+
+# The register of gates that must exist. A name here and absent from the checkout is a could-not-run.
+if [ -f tools/gates/expected-gates.txt ]; then
+  while IFS= read -r name; do
+    case "$name" in ''|\#*) continue ;; esac
+    if [ ! -f "tools/gates/$name" ]; then
+      echo "pre-commit: BLOCKED — tools/gates/$name is listed in expected-gates.txt and missing." >&2
+      echo "            A gate that did not run is never a pass. Restore it, or remove its row and" >&2
+      echo "            say why in the same change." >&2
+      failed=1
+    fi
+  done < tools/gates/expected-gates.txt
+fi
+
+shopt -s nullglob
+for gate in tools/gates/check_*.py; do
+  case "$gate" in *_test.py) continue ;; esac
+  if ! out="$(python3 "$gate" 2>&1)"; then
+    rc=$?
+    echo "" >&2
+    echo "pre-commit: FAILED — $gate (exit $rc)" >&2
+    echo "$out" | sed 's/^/            /' >&2
+    failed=1
+  fi
+done
+
+if [ "$failed" -ne 0 ]; then
+  cat >&2 <<'MSG'
+
+Commit refused. Fix the code — do not weaken a gate to get past this, and do not reach
+for --no-verify to make a real failure go away. If the gate itself is wrong, that is a
+finding worth its own change.
+MSG
+  exit 1
+fi
+exit 0
