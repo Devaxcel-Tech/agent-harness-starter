@@ -52,7 +52,8 @@
     <div><span class="n">08</span>Making CI tell the truth</div>
     <div><span class="n">09</span>Independence controls that outrank tests</div>
     <div><span class="n">10</span>Grounding, and writing it back</div>
-    <div><span class="n">11</span>What this pattern cannot give you</div>
+    <div><span class="n">11</span>The agent tooling layer</div>
+    <div><span class="n">12</span>What this pattern cannot give you</div>
   </div>
 
   <h3>The seven controls, in one table</h3>
@@ -641,7 +642,151 @@ a TEST file only     → exit 0   (mutating a test is meaningless)</code></pre>
 </section>
 
 <section class="page-break">
-  <h2><span class="num">11</span>What this pattern cannot give you</h2>
+  <h2><span class="num">11</span>The agent tooling layer — plugins, skills, subagents, tool servers</h2>
+  <div class="h2rule"></div>
+
+  <p class="lede">
+    Everything so far is tooling that checks <em>code</em>. This is the tooling the <em>agents</em>
+    themselves run on — and it needs the same discipline, for the same reason: it decides how work gets
+    done, and when it is wrong or missing, nothing says so.
+  </p>
+
+  <h3>The four layers, and which of them ship with your repository</h3>
+  <table>
+    <thead><tr><th style="width:20%">Layer</th><th style="width:15%">Ships?</th><th>What it is</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Subagents</strong></td><td><span class="chip pass">✓ committed</span></td>
+        <td>Narrow reviewers, one lens each. Definitions are files — commit them, and every clone gets the same review.</td></tr>
+      <tr><td><strong>Skills / commands</strong></td><td><span class="chip pass">✓ committed</span></td>
+        <td>Repeatable procedures an agent invokes by name: run a task end to end, review a change, scaffold a module. Files, so they commit.</td></tr>
+      <tr><td><strong>Hooks</strong></td><td><span class="chip pass">✓ committed</span></td>
+        <td>Run at session start or before a commit. Put grounding material in place; run the gates.</td></tr>
+      <tr><td><strong>Plugins &amp; tool servers</strong></td><td><span class="chip deny">✗ mostly local</span></td>
+        <td>Installed per machine, with per-machine credentials. <strong>This is where the harness quietly stops being shared.</strong></td></tr>
+    </tbody>
+  </table>
+
+  <div class="box warn">
+    <div class="t">✗ The finding that surprised us most</div>
+    <p>
+      Measured on a real project: <strong>roughly half the agent harness did not ship with the
+      repository.</strong> The subagents, skills and hooks were committed and everyone got them. The
+      plugin enablement, a forty-command set living in one engineer's home directory, every credential,
+      and a proxy sitting in front of every request — none of it.
+    </p>
+    <p>
+      So a teammate cloning the project got a materially weaker harness than the documentation
+      described, <strong>and nothing told them so.</strong> Their agent quietly did less, produced
+      worse output, and nobody could see why.
+    </p>
+  </div>
+
+  <h3>Subagents: four narrow lenses, run in parallel</h3>
+  <p>
+    Use several specialists rather than one generalist. A single "review this change" prompt optimises
+    for a coherent-sounding summary; four narrow prompts each optimise for finding their own kind of
+    problem. Working definitions are in <code>examples/agents/</code>.
+  </p>
+  <table>
+    <thead><tr><th style="width:22%">Lens</th><th>The question it exists to ask</th></tr></thead>
+    <tbody>
+      <tr><td><strong>security</strong></td><td>Could this leak, escalate, or fail open? Trace the <em>error</em> path — the most common real finding is code that proceeds when a dependency fails.</td></tr>
+      <tr><td><strong>architecture</strong></td><td>Is this in the right place, and does it respect the boundaries the project committed to?</td></tr>
+      <tr><td><strong>code quality</strong></td><td>Is it correct — and <strong>would each test fail if the behaviour regressed?</strong> A test that asserts nothing is an agent's default output when asked to add tests.</td></tr>
+      <tr><td><strong>modularity</strong></td><td>What does this couple to, which way do the dependencies point, and what is the blast radius?</td></tr>
+    </tbody>
+  </table>
+  <p>
+    <strong>They advise; they do not approve.</strong> If an automated verdict becomes a merge
+    authority, people write changes that satisfy the reviewer rather than changes that are right.
+  </p>
+
+  <h3>Lens diversity is not lineage diversity</h3>
+  <div class="box key">
+    <div class="t">◆ Two different kinds of independence, and you want both</div>
+    <p>
+      Four lenses from the <em>same model family</em> give you <strong>lens diversity</strong>: each
+      looks for something different. They still share a family's blind spots — they will all miss the
+      same class of thing, fluently and confidently.
+    </p>
+    <p>
+      A reviewer from a <strong>different model family</strong> gives you <strong>lineage
+      diversity</strong>: it fails differently. That is the one that catches what your panel
+      structurally cannot. In practice the first serious use of a different-lineage reviewer on this
+      material found <strong>a factually wrong comment in the very change that introduced it</strong> —
+      a claim about a tool's defaults that the tool's own schema contradicted, which four same-family
+      lenses had all read past.
+    </p>
+  </div>
+
+  <h3>Tool servers: choose by capability, not by availability</h3>
+  <p>
+    Tool servers let an agent do things it otherwise cannot — read a pull request, query a code graph,
+    drive a browser. Each is also attack surface and context budget, so <strong>a server nobody uses is
+    a cost with no benefit.</strong> The ones that consistently earn their place:
+  </p>
+  <table>
+    <thead><tr><th style="width:24%">Server</th><th>Why it earns its place</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Repository host</strong></td><td>Highest value by some distance: it is what lets an agent <em>finish</em> a task — open the pull request, file the issue a blocked decision needs — rather than hand you a diff.</td></tr>
+      <tr><td><strong>Code intelligence</strong></td><td>A queryable graph: what calls this, what breaks if it changes. Use it to <strong>scope</strong> work and size the test surface. Prefer one that runs locally with no code egress.</td></tr>
+      <tr><td><strong>Issue tracker</strong></td><td>Read the ticket being implemented; file the issue a decision row requires.</td></tr>
+      <tr><td><strong>Design source</strong></td><td>Makes grounding a tool call rather than a paste, which is the difference between grounding happening and not.</td></tr>
+      <tr><td><strong>Browser automation</strong></td><td>Only once you have a user-facing surface. Before that it is unused context.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="box rule">
+    <div class="t">◆ Three tool-server failures that all look like success</div>
+    <p>
+      <strong>Configured, connected, and unauthenticated.</strong> A server can report healthy and fail
+      on first real use, because credentials are read from the <em>process environment</em> and nothing
+      loads your <code>.env</code> file for you. Export it, then start your editor from that shell.
+    </p>
+    <p>
+      <strong>The same server defined at two scopes</strong> with different endpoints splits
+      authentication state — you authenticate one and use the other.
+    </p>
+    <p>
+      <strong>A server named in your documentation and absent from your config.</strong> Verify by
+      listing what is actually connected. Do not read the config and assume.
+    </p>
+  </div>
+
+  <h3>Anything in the request path is part of the harness</h3>
+  <p>
+    Proxies that compress context, cache, or route between models sit in front of <em>every</em> request
+    an agent makes. They are worth having and they are not neutral: they <strong>modify prompts in
+    flight</strong>, which is the first thing to remember when debugging behaviour that makes no sense.
+  </p>
+  <p>
+    On this project one such proxy also broke the different-lineage reviewer completely — it pointed the
+    reviewer's client at an endpoint that could not serve its models, so every call failed
+    authentication <em>while the tool's own health check reported ready</em>. It went unnoticed until
+    someone tried to use it for real. If something sits in your request path, <strong>document it where
+    people will look when a tool behaves strangely</strong>, and check what else it silently
+    intercepts.
+  </p>
+
+  <h3>Decide, per item, whether it ships</h3>
+  <table>
+    <thead><tr><th style="width:26%">Item</th><th>Default</th></tr></thead>
+    <tbody>
+      <tr><td>Subagent and skill definitions</td><td><strong>Commit.</strong> They define how work is done — the same argument as committing CI config.</td></tr>
+      <tr><td>Hooks</td><td><strong>Commit</strong>, opt-in to activate.</td></tr>
+      <tr><td>Tool-server config</td><td><strong>Commit a template</strong>, git-ignore the live file. It holds credentials.</td></tr>
+      <tr><td>Which plugins are enabled</td><td><strong>Commit the list</strong> if the team should have them. Otherwise the harness silently varies per machine and nobody can reproduce anyone else's results.</td></tr>
+      <tr><td>Credentials</td><td><strong>Never.</strong> Environment or a secret manager, and a secret scanner in case someone forgets.</td></tr>
+    </tbody>
+  </table>
+  <p>
+    Then write down, once, which half is which. The failure is not that some tooling is per-machine —
+    that is unavoidable. The failure is <strong>nobody knowing which half they are missing.</strong>
+  </p>
+</section>
+
+<section class="page-break">
+  <h2><span class="num">12</span>What this pattern cannot give you</h2>
   <div class="h2rule"></div>
 
   <p class="lede">

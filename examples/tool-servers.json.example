@@ -1,0 +1,51 @@
+{
+  "_comment": [
+    "Template for an agent's tool-server configuration (MCP or equivalent). Copy to the path your",
+    "runtime expects, git-ignore the live copy, and commit ONLY this template.",
+    "",
+    "THE RULE THAT CATCHES EVERYONE: values written as ${VAR} are expanded from the PROCESS",
+    "ENVIRONMENT, not from a .env file. Nothing loads .env for you. Populating that file alone leaves",
+    "servers reporting missing credentials while the values sit right there — export them first:",
+    "",
+    "    set -a; . ./.env; set +a      # then start your editor or agent FROM THAT SHELL",
+    "",
+    "Choose servers by what they let an agent DO that it otherwise cannot. Each one is attack surface",
+    "and context budget, so a server nobody uses is a cost with no benefit."
+  ],
+
+  "servers": {
+    "_repository_host": {
+      "_why": "Read and write pull requests, issues and reviews. The single highest-value server: it is what lets an agent finish a task rather than hand you a diff.",
+      "command": "npx", "args": ["-y", "<github-or-gitlab-mcp-server>"],
+      "env": { "TOKEN": "${REPO_TOKEN}" }
+    },
+    "_code_intelligence": {
+      "_why": "A queryable graph of the codebase — call chains, blast radius before a change. Use it to SCOPE work: what calls this, what breaks if it changes. Prefer one that runs locally with no code egress.",
+      "command": "npx", "args": ["-y", "<code-graph-server>"]
+    },
+    "_browser": {
+      "_why": "Drive a real browser for UI verification and accessibility checks. Only useful once you have a user-facing surface — before that it is unused context.",
+      "command": "npx", "args": ["-y", "<browser-automation-server>"]
+    },
+    "_issue_tracker": {
+      "_why": "Read the ticket an agent is implementing, and file the issue a blocked decision needs.",
+      "command": "npx", "args": ["-y", "<tracker-server>"],
+      "env": { "TOKEN": "${TRACKER_TOKEN}" }
+    },
+    "_docs_or_notes": {
+      "_why": "Read the design source of record, so grounding is a tool call rather than a paste.",
+      "command": "npx", "args": ["-y", "<notes-server>"]
+    }
+  },
+
+  "_operational_notes": [
+    "VERIFY, DO NOT ASSUME. Whatever your runtime's 'list servers' command is, run it and read the",
+    "status. A server can be configured, connected, AND unauthenticated all at once — which looks",
+    "healthy and fails on first real use.",
+    "",
+    "WATCH FOR DUPLICATE SCOPES. The same server defined at both user and project scope with different",
+    "endpoints will split authentication state, and you will authenticate one and use the other.",
+    "",
+    "REMOVE WHAT YOU DO NOT USE. Every server costs context and adds a failure mode."
+  ]
+}

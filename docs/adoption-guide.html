@@ -53,6 +53,7 @@
       <tr><td><strong>6</strong></td><td>Mutation testing</td><td>A measure of verification rather than execution.</td></tr>
       <tr><td><strong>7</strong></td><td>Trigger gates</td><td>Controls you will need later start failing when they start mattering.</td></tr>
       <tr><td><strong>8</strong></td><td>Drift protection</td><td>Shared files across repositories stop rotting silently.</td></tr>
+      <tr><td><strong>9</strong></td><td>The agent tooling layer</td><td>Review lenses, tool servers and hooks — and a written record of which half ships with the repo.</td></tr>
     </tbody>
   </table>
 
@@ -71,7 +72,11 @@ docs/
 .githooks/pre-commit                discovers and runs every gate
 .github/workflows/                  gates + secret scanning
 .gitleaks.toml                      secret-scanning config
-examples/vendored.json              template for the drift manifest</code></pre>
+examples/vendored.json              template for the drift manifest
+examples/agents/                    four review lenses (Stage 9)
+examples/tool-servers.json.example  tool-server config template (Stage 9)
+examples/session-start.sh           grounding hook (Stage 9)
+examples/CODEOWNERS.example         review routing (Stage 0)</code></pre>
   <p>
     No third-party Python packages, deliberately. A gate that needs <code>pip install</code> to work has
     acquired a way to fail that has nothing to do with the property it checks — and that failure looks
@@ -386,7 +391,110 @@ if __name__ == "__main__":
 </section>
 
 <section class="page-break">
-  <h2><span class="num">07</span>Verifying your installation</h2>
+  <h2><span class="num">07</span>Stage 9 — the agent tooling layer</h2>
+  <div class="h2rule"></div>
+
+  <p class="lede">
+    Everything so far checks your <em>code</em>. This stage sets up the tooling your <em>agents</em> run
+    on. Do it once the gates are in place, because several pieces reference them.
+  </p>
+
+  <h3>9a — Install the four review lenses</h3>
+  <p>
+    Copy <code>examples/agents/*.md</code> into wherever your runtime keeps subagent definitions, and
+    commit them. Four narrow reviewers beat one generalist: a single "review this" prompt optimises for
+    a coherent summary, four narrow prompts each optimise for finding their own kind of problem.
+  </p>
+  <table>
+    <thead><tr><th style="width:24%">Lens</th><th>What it is for</th></tr></thead>
+    <tbody>
+      <tr><td><code>security-reviewer</code></td><td>Leaks, authorisation, and <strong>fail-open behaviour</strong> — trace the error path, not the happy path.</td></tr>
+      <tr><td><code>architecture-reviewer</code></td><td>Placement and boundaries, judged against your <em>written</em> design.</td></tr>
+      <tr><td><code>code-quality-reviewer</code></td><td>Correctness, and <strong>whether each test would fail if the behaviour regressed</strong>.</td></tr>
+      <tr><td><code>modularity-reviewer</code></td><td>Coupling, dependency direction, blast radius.</td></tr>
+    </tbody>
+  </table>
+  <p>Run them in parallel on the same diff and synthesise. <strong>They advise; they never approve.</strong></p>
+
+  <h3>9b — Add a different-lineage reviewer</h3>
+  <div class="box key">
+    <div class="t">◆ This is a different control from 9a, not more of it</div>
+    <p>
+      Four lenses from the same model family give you <strong>lens diversity</strong> — and they still
+      share that family's blind spots. A reviewer from a <strong>different</strong> family fails
+      differently, which is what catches the class of thing your panel structurally cannot see.
+    </p>
+    <p>
+      Wrap it in a script in your repo rather than calling the tool directly. On this project the raw
+      client <strong>failed authentication on every call while its own health check reported ready</strong>,
+      because a local proxy had pointed it at an endpoint that could not serve its models. A one-line
+      wrapper fixed it — and, being committed, fixed it for everyone rather than for whoever debugged it.
+    </p>
+  </div>
+
+  <h3>9c — Configure tool servers</h3>
+  <p>
+    Copy <code>examples/tool-servers.json.example</code>, fill it in, and <strong>git-ignore the live
+    file</strong> — it holds credentials. Commit only the template.
+  </p>
+  <pre><code># Credentials are read from the PROCESS ENVIRONMENT. Nothing loads .env for you.
+set -a; . ./.env; set +a          # then start your editor or agent FROM THAT SHELL
+
+# Then VERIFY, do not assume — list what is actually connected:
+&lt;your-runtime&gt; list-servers</code></pre>
+  <table>
+    <thead><tr><th style="width:34%">Symptom</th><th>Cause</th></tr></thead>
+    <tbody>
+      <tr><td>"Missing environment variable", but the value is in <code>.env</code></td><td>You did not export it before starting the agent.</td></tr>
+      <tr><td>Authenticated in one place, not in another</td><td>The same server defined at two scopes with different endpoints. Remove one.</td></tr>
+      <tr><td>A server in your docs that does not exist</td><td>Documentation drift. Listing the live set is the only reliable check.</td></tr>
+      <tr><td>Connected but every call fails</td><td>Connected and unauthenticated are different states, and the first looks healthy.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>9d — The session-start hook</h3>
+  <p>
+    Copy <code>examples/session-start.sh</code> and adapt it to however your design source is obtained.
+    It must be <strong>idempotent</strong> (it runs every session) and <strong>non-fatal</strong> (a hook
+    that blocks a session on a failed network fetch gets deleted by the first person it inconveniences,
+    and then nobody has it).
+  </p>
+  <p>
+    Its job is putting grounding material in place <em>before</em> the agent starts. An agent that cannot
+    read the requirement will not stop and ask — it will infer a plausible one and implement that,
+    confidently.
+  </p>
+
+  <h3>9e — Write down which half ships</h3>
+  <div class="box warn">
+    <div class="t">✗ The step people skip, and the one that costs most</div>
+    <p>
+      Measured on a real project: <strong>about half the agent harness did not ship with the
+      repository.</strong> Definitions and hooks were committed; plugin enablement, a forty-command set
+      in one engineer's home directory, every credential and a request-path proxy were not. A teammate
+      cloning it got a weaker harness than the documentation described, <strong>and nothing told them
+      so.</strong>
+    </p>
+    <p>
+      You will not eliminate this — some tooling is genuinely per-machine. Just write down which is
+      which. The failure is not that half is local; it is <strong>nobody knowing which half they are
+      missing.</strong>
+    </p>
+  </div>
+  <table>
+    <thead><tr><th style="width:32%">Item</th><th>Default</th></tr></thead>
+    <tbody>
+      <tr><td>Subagent + skill definitions</td><td><strong>Commit</strong> — same argument as committing CI config.</td></tr>
+      <tr><td>Hooks</td><td><strong>Commit</strong>, opt-in to activate.</td></tr>
+      <tr><td>Tool-server config</td><td><strong>Template committed</strong>, live file ignored.</td></tr>
+      <tr><td>Enabled plugin list</td><td><strong>Commit</strong> if the team should have them, or results vary per machine and nobody can reproduce anyone else's.</td></tr>
+      <tr><td>Credentials</td><td><strong>Never.</strong> Environment or a secret manager — plus Stage 5, for when someone forgets.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section class="page-break">
+  <h2><span class="num">08</span>Verifying your installation</h2>
   <div class="h2rule"></div>
 
   <p class="lede">

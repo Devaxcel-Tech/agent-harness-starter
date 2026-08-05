@@ -63,6 +63,10 @@ docs/adoption-guide.html/.pdf                 how to install it, in stages
 .github/workflows/                            gates + secret scanning
 .gitleaks.toml                                secret-scanning config
 examples/vendored.json                        drift manifest template
+examples/agents/                              four review lenses
+examples/tool-servers.json.example            tool-server config template
+examples/session-start.sh                     grounding hook
+examples/CODEOWNERS.example                   review routing
 ```
 
 ## Two things to know before you start

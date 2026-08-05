@@ -1,0 +1,27 @@
+# Routes review by path. Copy to .github/CODEOWNERS (or your host's equivalent).
+#
+# READ THIS FIRST: **CODEOWNERS ALONE DOES NOTHING.** Your host uses it to REQUEST reviews, not to
+# require them. It becomes a control only when branch protection turns on "require review from code
+# owners". Until then every line here is a polite suggestion anyone can merge past — which is worth
+# knowing, because a code-owners file reads like a control and is not one.
+#
+# IF YOU ARE A SINGLE MAINTAINER, write yourself and say so in a comment. Inventing team handles that
+# do not exist produces silently broken review requests, which is worse than one honest name.
+
+*                       @your-handle
+
+# ── Paths where a mistake is expensive. Same owner today; the SPLIT is the point, so they are already
+#    carved out for whenever there is someone else to assign them to. ──
+
+# The enforcement machinery. A change that weakens a gate is the one least likely to announce itself
+# in a diff — it looks like a small config edit.
+/tools/gates/           @your-handle
+/tools/qa/              @your-handle
+/.githooks/             @your-handle
+
+# CI, secret scanning, and this file — anything that can turn a control off.
+/.github/               @your-handle
+/.gitleaks.toml         @your-handle
+
+# Dependency pinning and build reproducibility.
+/*.lock                 @your-handle
