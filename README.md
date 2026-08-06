@@ -16,7 +16,7 @@ spots, and a documented process becomes unfalsifiable.
 
 Every control here restores one specific piece of independence that automation took away.
 
-## The seven controls
+## The eight controls
 
 | Control | The failure it removes |
 |---|---|
@@ -27,6 +27,21 @@ Every control here restores one specific piece of independence that automation t
 | Drift protection | Copied shared files rotting with nothing noticing |
 | CI ordering laws | One check's failure hiding another's verdict |
 | Independence controls | An author's tests confirming the author's misunderstanding |
+| The loop, and its register | The process losing a step across a dozen edits, unnoticed |
+
+The last one is different in kind from the other seven. They are checks that fire when something runs
+them; the loop is the thing that runs them, and `examples/skills/task-loop/` is where it lives. A gate
+nobody invokes is as inert as a gate that cannot fail.
+
+Its register (`tools/gates/loop-obligations.expected`) is worth understanding before you adopt it. The
+rows are authored from the handbook, not from the skill, because **a register scraped out of the thing
+it checks is a mirror** — it agrees with whatever the skill currently says, so it can never disagree
+and never has anything to tell you. If you take the loop and have no separate document stating your
+process, author your rows from something — an ADR set, a team guide — or know that the check is
+agreeing with itself.
+
+And the honest limit, which the gate prints on every run: it proves the skill still **carries** each
+obligation. It cannot prove a live run **obeyed** them. No static check reaches that.
 
 ## Quickest useful path
 

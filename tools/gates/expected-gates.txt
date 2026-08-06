@@ -10,3 +10,4 @@
 check_decisions.py
 check_vendored_drift.py
 check_mutation_applicability.py
+check_loop_obligations.py
