@@ -86,3 +86,25 @@ indefinitely.
 `ID_PREFIX`, `REQUIRED_FIELDS`, `SOURCE_GLOBS` and `CONFIG_CANDIDATES` are meant to be edited for your
 project and language. Adding a field is tailoring. Removing a check because something fails it is
 deleting the finding — the two look identical in a diff, so say which you are doing.
+
+## Contributing
+
+Corrections, clearer wording, support for another language, or a control this is missing — all welcome.
+Open a pull request; you do not need to ask first. If you would rather just report the problem than fix
+it, open an issue.
+
+Two things worth knowing before you send a change:
+
+- **`tools/gates/check_gates_test.py` is the suite that proves the gates work.** Run it before and after
+  your change. A gate altered without a case covering the new behaviour is a gate nobody has watched
+  fail.
+- **A change that makes a check quieter needs to say so.** Loosening a rule and fixing a false positive
+  produce the same diff. Say which one you are doing, in the pull request body.
+
+Anything the maintainers cannot settle from the documentation gets recorded in `docs/DECISIONS.md`
+rather than guessed at.
+
+## License
+
+[Apache License 2.0](LICENSE). Use it, fork it, ship it in a commercial product — the licence includes
+an express patent grant, so contributions carry clear terms in both directions.
