@@ -1,4 +1,7 @@
-tools/qa/evidence/
+# tools/qa/evidence/ is deliberately NOT ignored. The handbook says evidence has to outlive the
+# terminal that produced it, and a kit that ignores its own evidence file documents a practice it
+# does not follow. It is a small file, rewritten by each run — that churn is the point, not a cost.
 __pycache__/
+.trace/
 *.pyc
 .DS_Store

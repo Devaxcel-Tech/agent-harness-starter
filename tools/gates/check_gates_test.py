@@ -35,7 +35,12 @@ import tempfile
 from pathlib import Path
 
 KIT = Path(__file__).resolve().parents[2]
-GATES = ["check_decisions.py", "check_vendored_drift.py", "check_mutation_applicability.py"]
+GATES = [
+    "check_decisions.py",
+    "check_vendored_drift.py",
+    "check_mutation_applicability.py",
+    "check_loop_obligations.py",
+]
 
 results: list[tuple[str, bool, str]] = []
 
@@ -65,20 +70,21 @@ def sandbox() -> Path:
     return tmp
 
 
-def run(root: Path, gate: str) -> tuple[int, str]:
+def run(root: Path, gate: str, args: tuple[str, ...] = ()) -> tuple[int, str]:
     p = subprocess.run(
-        [sys.executable, str(root / "tools" / "gates" / gate)],
+        [sys.executable, str(root / "tools" / "gates" / gate), *args],
         cwd=root, capture_output=True, text=True,
         env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
     )
     return p.returncode, p.stdout + p.stderr
 
 
-def case(name: str, gate: str, mutate, expect: int, expect_text: str | None = None) -> None:
+def case(name: str, gate: str, mutate, expect: int, expect_text: str | None = None,
+         args: tuple[str, ...] = ()) -> None:
     tmp = sandbox()
     try:
         mutate(tmp)
-        rc, out = run(tmp, gate)
+        rc, out = run(tmp, gate, args)
         ok = rc == expect
         detail = f"exit {rc}" if ok else f"exit {rc}, expected {expect}"
         if ok and expect_text and expect_text.lower() not in out.lower():
@@ -242,6 +248,114 @@ case("a dependency directory is NOT counted as product source",
 case("the HARNESS's own scripts are not counted as product source",
      "check_mutation_applicability.py",
      lambda t: put_source(t, "tools/helper.py", "x = 1\n"), 0, "not applicable")
+
+# ── loop obligations: a gate over a PROMPT ───────────────────────────────────────────────────────
+#
+# This gate is the odd one out — its subject is a markdown file an agent reads, not code. That makes
+# fault injection MORE important, not less: there is no compiler and no test run to notice when the
+# check has quietly stopped checking, so watching it fail is the only evidence it works at all.
+
+SKILL_REL = Path("examples/skills/task-loop/SKILL.md")
+REGISTER_REL = Path("tools/gates/loop-obligations.expected")
+
+REGISTER = """
+[X-1] the loop stops rather than guessing
+source = handbook section 1
+requires = halt and say so | never a paraphrase
+artifact = grounding.md
+"""
+SKILL_BODY = "# task-loop\n\nQuote the requirement, **never a paraphrase**.\nNo human? Then halt and say so.\n"
+
+
+def put_loop(root: Path, *, skill: str | None = SKILL_BODY, register: str | None = REGISTER) -> None:
+    if skill is not None:
+        (root / SKILL_REL).parent.mkdir(parents=True, exist_ok=True)
+        (root / SKILL_REL).write_text(skill)
+    if register is not None:
+        (root / REGISTER_REL).write_text(register)
+
+
+def trace(root: Path, files: dict[str, str]) -> Path:
+    d = root / ".trace"
+    d.mkdir(exist_ok=True)
+    for name, body in files.items():
+        (d / name).write_text(body)
+    return d
+
+
+# it must STAY QUIET
+case("no skill and no register is NOT APPLICABLE, and names the trigger", "check_loop_obligations.py",
+     lambda t: None, 0, "trigger")
+
+case("a skill carrying every registered obligation passes", "check_loop_obligations.py",
+     lambda t: put_loop(t), 0)
+
+# THE REGRESSION THAT WAS FOUND ON FIRST RUN. A line wrap fell inside a required phrase and three
+# rows reported missing against a skill that said exactly the right thing. A check a paragraph
+# reflow can turn red is a check people delete, so formatting is normalised — pinned here so nobody
+# "simplifies" the matching back to a plain substring test.
+case("a required phrase split across a LINE WRAP still matches", "check_loop_obligations.py",
+     lambda t: put_loop(t, skill="# task-loop\n\nQuote it, **never a\nparaphrase**.\nNo human? Then\nhalt and say so.\n"),
+     0)
+
+case("emphasis markers inside a required phrase do not break the match", "check_loop_obligations.py",
+     lambda t: put_loop(t, skill="# t\n\n`never a **paraphrase**` — and then _halt and say so_.\n"), 0)
+
+# it must FIRE
+case("a skill that dropped an obligation is rejected, and blames the SKILL",
+     "check_loop_obligations.py",
+     lambda t: put_loop(t, skill="# task-loop\n\nQuote the requirement, never a paraphrase.\n"),
+     1, "the skill is the defect")
+
+case("a register with rows but no skill is could-not-run, not a pass", "check_loop_obligations.py",
+     lambda t: put_loop(t, skill=None), 2)
+
+case("a skill with no register is could-not-run, and warns against a mirror",
+     "check_loop_obligations.py",
+     lambda t: put_loop(t, register=None), 2, "mirror")
+
+case("an EMPTY skill is could-not-run rather than 25 spurious findings", "check_loop_obligations.py",
+     lambda t: put_loop(t, skill="   \n"), 2)
+
+case("a register with zero rows is could-not-run, not a trivial pass", "check_loop_obligations.py",
+     lambda t: put_loop(t, register="# only comments here\n"), 2, "no rows")
+
+case("a malformed register is could-not-run, never a partial silent pass",
+     "check_loop_obligations.py",
+     lambda t: put_loop(t, register=REGISTER + "\nthis line is neither a header nor a field\n"),
+     2, "malformed")
+
+# A row that demands nothing passes against ANY skill — the same class of defect as a gate that
+# cannot fail, so the gate refuses it rather than counting it as verified.
+case("a row requiring no tokens is rejected as un-failable", "check_loop_obligations.py",
+     lambda t: put_loop(t, register="[X-9] a row that checks nothing\nsource = s\nrequires =\nartifact = none\n"),
+     1, "can never fail")
+
+# self-test mode: the artifacts are the assertion
+case("--self-test with every artifact present passes", "check_loop_obligations.py",
+     lambda t: (put_loop(t), trace(t, {"grounding.md": "quoted the rule\n"})), 0,
+     args=("--self-test", ".trace"))
+
+case("--self-test with a MISSING artifact is rejected", "check_loop_obligations.py",
+     lambda t: (put_loop(t), trace(t, {})), 1, "never written",
+     args=("--self-test", ".trace"))
+
+case("--self-test with an EMPTY artifact is rejected (a stage that did nothing)",
+     "check_loop_obligations.py",
+     lambda t: (put_loop(t), trace(t, {"grounding.md": ""})), 1, "empty",
+     args=("--self-test", ".trace"))
+
+case("--self-test pointed at a directory that does not exist is could-not-run",
+     "check_loop_obligations.py",
+     lambda t: put_loop(t), 2, "does not exist",
+     args=("--self-test", ".no-such-trace"))
+
+case("--self-test with no directory argument is could-not-run", "check_loop_obligations.py",
+     lambda t: put_loop(t), 2, "needs a trace directory", args=("--self-test",))
+
+case("an unknown argument is could-not-run, not ignored", "check_loop_obligations.py",
+     lambda t: put_loop(t), 2, "unknown argument", args=("--wat",))
+
 
 # ── verdict ──────────────────────────────────────────────────────────────────────────────────────
 print("gate fault injection — every case makes the violation real\n")

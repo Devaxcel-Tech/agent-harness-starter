@@ -1,0 +1,209 @@
+# The obligations the task-loop skill must carry. One row per claim the handbook makes.
+#
+# WHY THIS FILE EXISTS, AND THE BOUNDARY IT DOES NOT CROSS.
+#
+# The loop is a markdown prompt, and **nothing can mechanically guarantee that an agent follows a
+# prompt.** That is not a property this file, or any file, can establish, and a control that reads
+# like proof and is not is the exact failure the rest of this kit exists to remove. So the two halves
+# are stated up front:
+#
+#   WHAT IS GUARANTEED, on every run:
+#     the skill still CONTAINS every obligation registered below. An edit six months from now cannot
+#     silently drop a step, a tool call, or a rule, because the row stops resolving and the gate goes
+#     red. This is the realistic failure — not an agent defying its instructions, but the prompt
+#     quietly losing a step across a dozen edits until nobody remembers it was ever required.
+#
+#   WHAT IS NOT GUARANTEED:
+#     that any given live run obeyed them. A prompt is followed or not at runtime and no static check
+#     reaches that. `--self-test <dir>` narrows it by asserting each stage's OBSERVABLE ARTIFACT
+#     exists and is non-empty, rather than the agent's claim to have done the work — but a passing
+#     self-test says the loop CAN execute every stage, never that yesterday's real run DID.
+#
+# WHY THE ROWS ARE AUTHORED FROM THE HANDBOOK AND NOT SCRAPED FROM THE SKILL.
+#
+# This is the single design decision that makes the check worth running. A register derived from the
+# skill is a MIRROR: it agrees with whatever the skill currently says, including after the skill has
+# drifted away from the documented process. It can never disagree, so it can never tell you anything.
+#
+# Every row below is authored from `docs/pattern-handbook` §12 (the walkthrough) and its cited
+# sections. Those are a separate document making independent claims, so the two can genuinely
+# disagree — which is the whole point. It is the blind-conformance idea applied to a process instead
+# of to a package.
+#
+# **IF YOU ADOPT THIS KIT AND HAVE NO SEPARATE DESIGN RECORD, THIS CHECK IS A MIRROR AND IS WORTH
+# LITTLE.** Author your rows from whatever states your process — an ADR set, a team handbook, an
+# engineering guide. If you write them by reading the skill, you have built a check that agrees with
+# itself. Better to know that than to discover it.
+#
+# HOW A ROW IS READ.
+#
+#   [HB-n]        the identifier; `HB` = handbook, since that is what each row is authored from
+#   source =      the handbook section the claim comes from, so a reader can check the row is faithful
+#   requires =    tokens that MUST all appear in the skill, literally, separated by `|`.
+#                 Concrete and stable by design: a command, a flag, a distinctive phrase. NEVER a
+#                 whole sentence — prose gets reworded, and a check that fails on rewording teaches
+#                 people to delete the check, which is strictly worse than not having it.
+#   artifact =    what a real run leaves behind, checked by `--self-test`. `none` where the
+#                 obligation is a prohibition and correctly leaves no trace.
+#
+# NEVER narrow a row to make it pass. If the skill no longer carries an obligation, THE SKILL IS THE
+# DEFECT — restore the step. Narrowing the row deletes the only thing that noticed.
+
+# ── Step 0: before anything ──────────────────────────────────────────────────────────────────────
+
+[HB-01] work on a branch, never the default branch
+source = handbook §12 step 0 — "Branch. Never work on the default branch."
+requires = never the default branch
+artifact = branch-name.txt
+
+[HB-02] credentials are exported into the process environment, not left in an unsourced file
+source = handbook §12 step 0 — a .env nothing sources "leaves every server unauthenticated while looking configured"
+requires = process environment
+artifact = none
+
+# ── Step 1: ground, and quote ────────────────────────────────────────────────────────────────────
+
+[HB-03] the requirement is QUOTED, never paraphrased
+source = handbook §12 step 1 — "copy the exact sentence. Not a paraphrase"
+requires = quote | never a paraphrase
+artifact = grounding.md
+
+[HB-04] check whether a later decision superseded the one you found
+source = handbook §12 step 1 — building against an overridden rule is "confidently wrong code with a citation attached"
+requires = superseded
+artifact = grounding.md
+
+[HB-05] an unsettled requirement STOPS the work — record a decision, never pick the sensible option
+source = handbook §12 step 1, the branch point — "Do not choose the sensible option"
+requires = do not choose the sensible option | docs/DECISIONS.md | open the issue
+artifact = decisions-recorded.md
+
+# ── Steps 2-3: plan, and review the plan before code exists ──────────────────────────────────────
+
+[HB-06] a phased plan with verification checkpoints, for anything beyond a small change
+source = handbook §12 steps 2-3 — "a phased plan with verification checkpoints"
+requires = phased plan | verification checkpoint
+artifact = plan.md
+
+[HB-07] blast radius is computed first, and it IS the test scope
+source = handbook §12 steps 2-3 — "That call graph is your test scope"
+requires = blast radius | test scope
+artifact = plan.md
+
+[HB-08] the architecture lens reviews the PLAN, before any code exists
+source = handbook §12 steps 2-3 — "the cheapest place in the whole sequence to catch a boundary violation"
+requires = architecture-reviewer | before any code
+artifact = plan-review.md
+
+# ── Step 4: implement, test first ────────────────────────────────────────────────────────────────
+
+[HB-09] red-green-refactor, and the red test is WATCHED failing
+source = handbook §12 step 4 — "A test you have not seen fail proves nothing."
+requires = watch it fail | RED | GREEN | REFACTOR
+artifact = none
+
+[HB-10] the QUOTED requirement goes inside the test, not only the commit message
+source = handbook §12 step 4 — encoding the quote is "what makes a misreading visible to the next reader"
+requires = quoted requirement in the test
+artifact = none
+
+[HB-11] a new module's registry row lands BEFORE its code
+source = handbook §12 step 4 — "so that an unregistered module fails the build rather than an eventual review"
+requires = row before the code
+artifact = none
+
+# ── Step 5: verify, in cost order ────────────────────────────────────────────────────────────────
+
+[HB-12] the five controls run in cost order, cheapest first
+source = handbook §12 step 5 table — structural gates, property, mutation, fault injection, blind conformance
+requires = structural gates | property | mutation | fault injection | blind conformance
+artifact = verification.md
+
+[HB-13] a surviving mutant is a missing assertion; the floor is never lowered
+source = handbook §12 step 5 — "Never lower the floor."
+requires = surviving mutant | missing assertion | never lower
+artifact = verification.md
+
+[HB-14] a control not yet built is DECLARED, never implied to be covered
+source = handbook §12 step 5 — "If you have not built this yet, say so rather than implying coverage."
+requires = say so rather than implying coverage
+artifact = verification.md
+
+[HB-15] a blind-conformance disagreement is escalated, never resolved by the author
+source = handbook §12 step 5 — "your reading is what is in question"
+requires = finding for a human | do not resolve it
+artifact = none
+
+[HB-16] the orchestrator runs once and its evidence file is COMMITTED
+source = handbook §12 step 5 — "Evidence has to outlive the terminal that produced it."
+requires = commit the evidence
+artifact = evidence.md
+
+[HB-17] a failing gate has exactly three legitimate responses, and lowering a threshold is not one
+source = handbook §12 step 5 — "Lowering a threshold is not on the list."
+requires = three legitimate | fix the gate as its own change | not on the list
+artifact = none
+
+# ── Step 6: review, both kinds of independence ───────────────────────────────────────────────────
+
+[HB-18] narrow lenses in parallel, THEN a different-family reviewer — two different controls
+source = handbook §12 step 6 — "the lenses give you diversity of attention, the other family gives you diversity of failure"
+requires = diversity of attention | diversity of failure | in parallel
+artifact = review.md
+
+[HB-19] every finding is recorded acted-on or dismissed WITH A REASON
+source = handbook §12 step 6 — an absent review and a clean review look identical otherwise
+requires = dismissed with a reason
+artifact = review.md
+
+[HB-20] a pass that could not run is STATED as skipped, never omitted
+source = handbook §12 step 6 — "say that it was skipped rather than omitting it silently"
+requires = skipped | never omit
+artifact = review.md
+
+# ── Step 7: raise the PR, and stop ───────────────────────────────────────────────────────────────
+
+[HB-21] you do not merge your own work
+source = handbook §12 step 7 — "You do not merge your own work."
+requires = do not merge | STOP
+artifact = none
+
+[HB-22] the implementation record states what you deliberately did NOT do
+source = handbook §12 step 7 — "the one people skip and the one that makes the rest believable"
+requires = deliberately did not do
+artifact = record.md
+
+# ── Cross-cutting, from the sections the walkthrough rests on ────────────────────────────────────
+
+[HB-23] exit codes 2 and 3 are never read as a pass
+source = handbook §02 — "2 AND 3 ARE NOT PASSES"
+requires = 2 and 3 are not passes
+artifact = none
+
+[HB-24] a trigger-gated control reports PENDING WITH ITS TRIGGER; inventing a pass is a defect
+source = handbook §06 — "not applicable" must not silently become "unmeasured"
+requires = PENDING | its trigger | faked pass
+artifact = verification.md
+
+[HB-25] nothing here blocks without branch protection, and the loop says so
+source = handbook §13 — "None of it blocks anything without branch protection"
+requires = branch protection
+artifact = none
+
+# ── Carried by the skill but DELIBERATELY UNREGISTERED ───────────────────────────────────────────
+#
+# The skill also carries three obligations with no row above, and the omission is deliberate rather
+# than an oversight:
+#
+#   · work in a git WORKTREE, never a branch switch in place
+#   · compact context only AFTER the work is recorded, then re-read rather than remember
+#   · `Closes #N` only when the issue is fully done, otherwise `Refs #N`
+#
+# All three are load-bearing — the first two were learned from real incidents. None of them appears
+# anywhere in the handbook, so a row here could only have been authored by reading the skill, which
+# is precisely the mirror this file's header warns against. Manufacturing the source to justify the
+# row would be worse than leaving the row out.
+#
+# The correct fix is to state them in the handbook and then register them, tracked as owed work.
+# Until then they are documented in the skill and unenforced, and this comment is the record of that
+# gap — an honest hole beats a check that agrees with itself.
