@@ -23,8 +23,12 @@ set -uo pipefail
 root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 cd "$root" || exit 0
 
-if ! command -v python3 >/dev/null 2>&1; then
-  echo "pre-commit: python3 not found, so no gate could run." >&2
+# NOT `command -v python3` — on stock Windows that resolves to the App Execution Alias stub,
+# which is present on PATH but exits nonzero with a Microsoft Store prompt instead of running
+# anything. `command -v` would call that "found" and let every gate below misreport a real
+# missing-interpreter as a VIOLATED finding instead of the CANNOT_RUN it actually is.
+if ! python3 -c "" >/dev/null 2>&1; then
+  echo "pre-commit: python3 not found or not runnable, so no gate could run." >&2
   echo "            This is a COULD-NOT-RUN, not a pass." >&2
   exit 1
 fi
