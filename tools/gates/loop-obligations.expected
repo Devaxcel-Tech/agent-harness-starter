@@ -190,20 +190,28 @@ source = handbook §13 — "None of it blocks anything without branch protection
 requires = branch protection
 artifact = none
 
-# ── Carried by the skill but DELIBERATELY UNREGISTERED ───────────────────────────────────────────
+# ── Isolation, and the ordering around context compaction ───────────────────────────────────────
 #
-# The skill also carries three obligations with no row above, and the omission is deliberate rather
-# than an oversight:
+# These three rows were OWED for one release and could not be written. The skill carried all three,
+# the handbook stated none of them, and a row authored by reading the skill would have been the
+# mirror this file's header warns against — so they shipped documented and unenforced, with the gap
+# recorded here rather than papered over.
 #
-#   · work in a git WORKTREE, never a branch switch in place
-#   · compact context only AFTER the work is recorded, then re-read rather than remember
-#   · `Closes #N` only when the issue is fully done, otherwise `Refs #N`
-#
-# All three are load-bearing — the first two were learned from real incidents. None of them appears
-# anywhere in the handbook, so a row here could only have been authored by reading the skill, which
-# is precisely the mirror this file's header warns against. Manufacturing the source to justify the
-# row would be worse than leaving the row out.
-#
-# The correct fix is to state them in the handbook and then register them, tracked as owed work.
-# Until then they are documented in the skill and unenforced, and this comment is the record of that
-# gap — an honest hole beats a check that agrees with itself.
+# The handbook now states all three (issue #3), so they are registered on the same terms as every
+# other row. Worth noting what the sequence cost: one release with a real hole in it, which is the
+# honest price of not manufacturing a source to justify a row.
+
+[HB-26] work in a worktree, never a branch switch in place
+source = handbook §12 step 0 — "A branch switch mutates the tree other sessions are using"
+requires = git worktree add | never a branch switch in place
+artifact = branch-name.txt
+
+[HB-27] compact only after the work is recorded, then re-read rather than remember
+source = handbook §12 step 8 — "Compaction destroys anything not already in a durable artifact"
+requires = achieved, tested and | re-read | do not remember
+artifact = none
+
+[HB-28] Closes only when the issue is fully done, otherwise Refs
+source = handbook §12 step 7 — a Closes on partial work makes the remainder invisible
+requires = Closes #N | Refs #N
+artifact = none

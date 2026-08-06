@@ -110,9 +110,10 @@ boundary. Do not begin without it, and do not ask again per chunk.
 
 ### ⑥–⑨ Unattended: execute, prove, review, report
 
-One worker per chunk, each **in its own worktree**. Never switch branches in place: `git checkout -B`
-mutates the tree other sessions are using, moving their HEAD and their working files mid-task. Create
-worktrees **one at a time** — simultaneous `git worktree add` calls race on `.git/config.lock`.
+One worker per chunk, each **in its own worktree** — `git worktree add`, and **never a branch switch
+in place**. `git checkout -B` mutates the tree other sessions are using, moving their HEAD and their
+working files mid-task. Create worktrees **one at a time**: simultaneous adds race on
+`.git/config.lock`.
 
 **A halt advances to the next chunk; it does not end the session.** A session that halts on three
 chunks and lands two did its job. One that guessed on three and landed five did damage nobody will

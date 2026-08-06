@@ -57,7 +57,7 @@
     <div><span class="n">13</span>What this pattern cannot give you</div>
   </div>
 
-  <h3>The seven controls, in one table</h3>
+  <h3>The eight controls, in one table</h3>
   <table>
     <thead><tr><th style="width:29%">Control</th><th>The specific failure it removes</th></tr></thead>
     <tbody>
@@ -68,6 +68,7 @@
       <tr><td><strong>Drift protection</strong></td><td>Copied shared files rotting with nothing noticing.</td></tr>
       <tr><td><strong>CI ordering laws</strong></td><td>One check's failure hiding another's verdict.</td></tr>
       <tr><td><strong>Independence controls</strong></td><td>An author's tests confirming the author's misunderstanding.</td></tr>
+      <tr><td><strong>The loop, and its register</strong></td><td>The process quietly losing a step across a dozen edits, with nothing noticing.</td></tr>
     </tbody>
   </table>
   <p>
@@ -75,6 +76,12 @@
     failing exit code behind it, rather than a practice you hope people follow. With agents, hope does
     not scale — an agent will always produce a confident answer, so the discipline has to be
     enforceable rather than cultural.
+  </p>
+  <p>
+    The last control is different in kind from the other seven. They are checks that fire when something
+    runs them; the loop (§12) is the thing that runs them. A gate nobody invokes is as inert as a gate
+    that cannot fail — and because the loop is written as prose an agent reads, it is the one control
+    that can be edited away without a single test going red. Its register is what closes that gap.
   </p>
 </section>
 
@@ -883,9 +890,24 @@ a TEST file only     → exit 0   (mutating a test is meaningless)</code></pre>
   <h3>Step 0 — before anything</h3>
   <ol>
     <li><strong>Branch.</strong> Never work on the default branch.</li>
+    <li><strong>Take a worktree, never a branch switch in place.</strong> Run <code>git worktree add</code> rather than <code>git checkout -B</code>. Create them one at a time — simultaneous adds race on <code>.git/config.lock</code>.</li>
     <li><strong>Export credentials into the shell you will start the agent from.</strong> Tool servers read them from the process environment; a <code>.env</code> file nothing sources leaves every server unauthenticated while looking configured.</li>
     <li><strong>Ask whether this is already solved.</strong> If you have cross-session memory, one query is cheaper than rediscovering a decision from three weeks ago.</li>
   </ol>
+  <div class="box warn">
+    <div class="t">✗ Why the worktree is not a preference</div>
+    <p>
+      A branch switch mutates the tree <em>other sessions are using</em>. It moves their HEAD, their
+      branch and their working files, mid-task, with no warning to them and no error to you. Two agents
+      sharing one clone is now the normal case rather than an edge case, and this is the failure it
+      produces — observed twice in a single evening on the project this kit was extracted from.
+    </p>
+    <p>
+      A worktree is the only arrangement under which two runs can share a clone safely, and it costs one
+      command. The visible symptom is somebody else's work disappearing, which is investigated as data
+      loss for an hour before anyone suspects the branch.
+    </p>
+  </div>
 
   <h3>Step 1 — Ground, and quote the requirement</h3>
   <p>
@@ -985,6 +1007,47 @@ REFACTOR keep it green</code></pre>
   <p>
     That last part is the one people skip and the one that makes the rest believable. A record claiming a
     control that never ran is worse than one admitting a gap — because somebody will rely on it.
+  </p>
+  <p>
+    <strong>Then choose the linking verb deliberately.</strong> Write <code>Closes #N</code> only when
+    this PR completes <em>every</em> remaining requirement of that issue. Otherwise write
+    <code>Refs #N</code>. A <code>Closes</code> on partial work auto-closes the issue the moment the PR
+    merges, and the remainder stops being visible to anyone — the tracker now says the work is finished
+    and nothing contradicts it. Partial progress is the normal case, not a failure; an issue closed with
+    requirements outstanding is worse than one left open with the remainder named.
+  </p>
+
+  <h3>Step 8 — Compact, but only after the work is recorded</h3>
+  <p>
+    Long agent runs exhaust their context and compact it: the conversation is discarded and replaced with
+    a summary. That is routine and necessary. What makes it dangerous is the ordering.
+  </p>
+  <div class="box rule">
+    <div class="t">◆ Compact only after achieved, tested and <em>recorded</em> — in that order</div>
+    <p>
+      This is a precondition, not a preference. <strong>Compaction destroys anything not already in a
+      durable artifact.</strong> Compacting before the work is recorded is data loss, and it is silent —
+      the summary reads perfectly well, and what it omits leaves no gap where anyone would look.
+    </p>
+    <p>
+      It is safe only once the plan file, the evidence file, the issue comment and the PR body already
+      hold what matters. The conversation is scratch; the artifacts are the record.
+    </p>
+  </div>
+  <p>
+    Carry forward only the approved goal, where things stand, and <em>pointers</em> — paths, issue
+    numbers, URLs. Never contents.
+  </p>
+  <p>
+    <strong>Then re-read, do not remember.</strong> After compacting, re-open the cited requirement and
+    the approved plan rather than working from the summary of them. A compaction's rendering of a rule is
+    a <strong>paraphrase</strong>, and paraphrase is what step 1 forbids for exactly the same reason: the
+    difference between a remembered rule and a quoted one shows up only as confidently wrong code, long
+    after anyone could trace where the misreading entered.
+  </p>
+  <p>
+    If context pressure arrives mid-chunk with nothing yet recorded, the chunk was scoped too big. Split
+    it at the next planning pass rather than compacting through the middle and hoping.
   </p>
 
   <h3>What the sequence costs, honestly</h3>
