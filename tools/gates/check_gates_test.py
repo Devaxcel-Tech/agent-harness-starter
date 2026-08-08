@@ -66,7 +66,7 @@ def sandbox() -> Path:
     (tmp / "docs").mkdir()
     for g in [*GATES, "harness.py"]:
         shutil.copy2(KIT / "tools" / "gates" / g, tmp / "tools" / "gates" / g)
-    (tmp / "docs" / "DECISIONS.md").write_text("# Decision register\n" + GOOD_ROW)
+    (tmp / "docs" / "DECISIONS.md").write_text("# Decision register\n" + GOOD_ROW, encoding="utf-8")
     return tmp
 
 
@@ -96,16 +96,16 @@ def case(name: str, gate: str, mutate, expect: int, expect_text: str | None = No
 
 def set_field(root: Path, label: str, value: str) -> None:
     p = root / "docs" / "DECISIONS.md"
-    lines = p.read_text().splitlines()
+    lines = p.read_text(encoding="utf-8").splitlines()
     out = [f"- **{label}:** {value}" if l.strip().startswith(f"- **{label}:**") else l for l in lines]
-    p.write_text("\n".join(out) + "\n")
+    p.write_text("\n".join(out) + "\n", encoding="utf-8")
 
 
 def drop_field(root: Path, label: str) -> None:
     p = root / "docs" / "DECISIONS.md"
     p.write_text("\n".join(
-        l for l in p.read_text().splitlines() if not l.strip().startswith(f"- **{label}:**")
-    ) + "\n")
+        l for l in p.read_text(encoding="utf-8").splitlines() if not l.strip().startswith(f"- **{label}:**")
+    ) + "\n", encoding="utf-8")
 
 
 # ── decision register: it must FIRE ──────────────────────────────────────────────────────────────
@@ -130,21 +130,21 @@ case("an unknown status is rejected", "check_decisions.py",
 
 case("a duplicate id is rejected", "check_decisions.py",
      lambda t: (t / "docs" / "DECISIONS.md").write_text(
-         "# reg\n" + GOOD_ROW + GOOD_ROW), 1, "duplicate identifier")
+         "# reg\n" + GOOD_ROW + GOOD_ROW, encoding="utf-8"), 1, "duplicate identifier")
 
 case("RESOLVED with no ruling is rejected", "check_decisions.py",
      lambda t: (set_field(t, "Status", "RESOLVED"), set_field(t, "Ruling", "—")), 1,
      "no ruling recorded")
 
 case("a decision cited but never recorded is rejected", "check_decisions.py",
-     lambda t: (t / "README.md").write_text("See DEC-99 for the caching choice.\n"), 1,
+     lambda t: (t / "README.md").write_text("See DEC-99 for the caching choice.\n", encoding="utf-8"), 1,
      "not a row")
 
 # ── decision register: it must STAY QUIET ────────────────────────────────────────────────────────
 case("a well-formed open row passes", "check_decisions.py", lambda t: None, 0)
 
 case("an EMPTY register passes and says it validated zero rows", "check_decisions.py",
-     lambda t: (t / "docs" / "DECISIONS.md").write_text("# Decision register\n\nNo rows yet.\n"), 0,
+     lambda t: (t / "docs" / "DECISIONS.md").write_text("# Decision register\n\nNo rows yet.\n", encoding="utf-8"), 0,
      "zero rows")
 
 case("a RESOLVED row citing a real ruling passes", "check_decisions.py",
@@ -155,9 +155,9 @@ case("a RESOLVED row citing a real ruling passes", "check_decisions.py",
 def with_manifest(root: Path, *, edit: bool = False, template_leak: bool = False,
                   missing: bool = False) -> None:
     shared = root / "shared.md"
-    shared.write_text("upstream content\n")
+    shared.write_text("upstream content\n", encoding="utf-8")
     tmpl = root / "templated.md"
-    tmpl.write_text("this repo is downstream-repo\n")
+    tmpl.write_text("this repo is downstream-repo\n", encoding="utf-8")
     import hashlib
     h = hashlib.sha256(shared.read_bytes()).hexdigest()
     (root / "tools" / "gates" / "vendored.json").write_text(json.dumps({
@@ -165,11 +165,11 @@ def with_manifest(root: Path, *, edit: bool = False, template_leak: bool = False
         "upstream_marker": "UPSTREAM-SLUG",
         "verbatim": {"shared.md": h},
         "templated": {"templated.md": {"rule": "slug substituted"}},
-    }))
+    }), encoding="utf-8")
     if edit:
-        shared.write_text("upstream content\nlocal tweak\n")
+        shared.write_text("upstream content\nlocal tweak\n", encoding="utf-8")
     if template_leak:
-        tmpl.write_text("this repo is UPSTREAM-SLUG\n")
+        tmpl.write_text("this repo is UPSTREAM-SLUG\n", encoding="utf-8")
     if missing:
         shared.unlink()
 
@@ -189,23 +189,23 @@ case("an unchanged shared file passes", "check_vendored_drift.py",
      lambda t: with_manifest(t), 0)
 
 case("an unreadable manifest is could-not-run, not a pass", "check_vendored_drift.py",
-     lambda t: (t / "tools" / "gates" / "vendored.json").write_text("{ not json"), 2, "unreadable")
+     lambda t: (t / "tools" / "gates" / "vendored.json").write_text("{ not json", encoding="utf-8"), 2, "unreadable")
 
 # ── mutation applicability ───────────────────────────────────────────────────────────────────────
 case("no source is NOT APPLICABLE, and names the trigger", "check_mutation_applicability.py",
      lambda t: None, 0, "trigger")
 
 case("source with no mutation config is rejected", "check_mutation_applicability.py",
-     lambda t: (t / "src").mkdir() or (t / "src" / "a.ts").write_text("export const x = 1;\n"),
+     lambda t: (t / "src").mkdir() or (t / "src" / "a.ts").write_text("export const x = 1;\n", encoding="utf-8"),
      1, "unobtainable")
 
 case("source WITH mutation config passes", "check_mutation_applicability.py",
-     lambda t: ((t / "src").mkdir(), (t / "src" / "a.ts").write_text("export const x = 1;\n"),
-                (t / "stryker.config.json").write_text("{}")), 0)
+     lambda t: ((t / "src").mkdir(), (t / "src" / "a.ts").write_text("export const x = 1;\n", encoding="utf-8"),
+                (t / "stryker.config.json").write_text("{}", encoding="utf-8")), 0)
 
 case("a TEST file alone does not trip it (mutating a test is meaningless)",
      "check_mutation_applicability.py",
-     lambda t: ((t / "src").mkdir(), (t / "src" / "a.test.ts").write_text("test('x',()=>{});\n")),
+     lambda t: ((t / "src").mkdir(), (t / "src" / "a.test.ts").write_text("test('x',()=>{});\n", encoding="utf-8")),
      0, "not applicable")
 
 # ── Regressions found by ADVERSARIAL TESTING of this kit, each pinned here ───────────────────────
@@ -214,13 +214,13 @@ case("a TEST file alone does not trip it (mutating a test is meaningless)",
 
 case("a TILDE-fenced example row is not parsed as a real row", "check_decisions.py",
      lambda t: (t / "docs" / "DECISIONS.md").write_text(
-         "# reg\n~~~\n## DEC-5 — an example inside a tilde fence\n\n- **Status:** OPEN\n~~~\n"), 0,
-     "zero rows")
+         "# reg\n~~~\n## DEC-5 — an example inside a tilde fence\n\n- **Status:** OPEN\n~~~\n",
+         encoding="utf-8"), 0, "zero rows")
 
 case("a BACKTICK-fenced example row is not parsed as a real row", "check_decisions.py",
      lambda t: (t / "docs" / "DECISIONS.md").write_text(
-         "# reg\n```\n## DEC-6 — an example inside a backtick fence\n\n- **Status:** OPEN\n```\n"), 0,
-     "zero rows")
+         "# reg\n```\n## DEC-6 — an example inside a backtick fence\n\n- **Status:** OPEN\n```\n",
+         encoding="utf-8"), 0, "zero rows")
 
 case("a VACUOUS code locus does not satisfy the entry condition", "check_decisions.py",
      lambda t: set_field(t, "What differs in the code", "(a) `.` (b) `x.`"), 1,
@@ -232,7 +232,7 @@ case("a real dotted symbol IS accepted as a locus", "check_decisions.py",
 def put_source(root, rel: str, body: str = "export const f = 1;\n"):
     p = root / rel
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(body)
+    p.write_text(body, encoding="utf-8")
 
 case("source in an UNCONVENTIONAL directory is still found", "check_mutation_applicability.py",
      lambda t: put_source(t, "internal/service/a.ts"), 1, "unobtainable")
@@ -270,16 +270,16 @@ SKILL_BODY = "# task-loop\n\nQuote the requirement, **never a paraphrase**.\nNo 
 def put_loop(root: Path, *, skill: str | None = SKILL_BODY, register: str | None = REGISTER) -> None:
     if skill is not None:
         (root / SKILL_REL).parent.mkdir(parents=True, exist_ok=True)
-        (root / SKILL_REL).write_text(skill)
+        (root / SKILL_REL).write_text(skill, encoding="utf-8")
     if register is not None:
-        (root / REGISTER_REL).write_text(register)
+        (root / REGISTER_REL).write_text(register, encoding="utf-8")
 
 
 def trace(root: Path, files: dict[str, str]) -> Path:
     d = root / ".trace"
     d.mkdir(exist_ok=True)
     for name, body in files.items():
-        (d / name).write_text(body)
+        (d / name).write_text(body, encoding="utf-8")
     return d
 
 
