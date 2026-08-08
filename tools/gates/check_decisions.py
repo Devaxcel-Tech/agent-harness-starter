@@ -195,7 +195,22 @@ def main() -> int:
             ],
         )
 
-    text = strip_fences(path.read_text(encoding="utf-8"))
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except UnicodeDecodeError as exc:
+        return report(
+            "decision register",
+            CANNOT_RUN,
+            violations=[
+                f"{REGISTER} is not valid UTF-8, so it could not be read to a verdict: {exc}.\n"
+                "      This is a COULD-NOT-RUN, not a violation. The register may be entirely well-formed,\n"
+                "      but a byte written under another host's default encoding (e.g. a Windows cp1252\n"
+                "      em-dash, 0x97) cannot be decoded here, and a crash on read must never be reported\n"
+                "      as a VIOLATED row. Re-save docs/DECISIONS.md as UTF-8."
+            ],
+        )
+
+    text = strip_fences(raw)
     rows = parse_rows(text)
     violations: list[str] = []
     seen_ids: dict[str, int] = {}
