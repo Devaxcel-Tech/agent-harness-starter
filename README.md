@@ -70,7 +70,7 @@ tools/gates/check_vendored_drift.py           shared-file drift gate
 tools/gates/check_mutation_applicability.py   a worked trigger gate
 tools/gates/check_loop_obligations.py         the loop still carries every obligation
 tools/gates/loop-obligations.expected         the obligations, authored from the handbook
-tools/gates/check_gates_test.py               fault injection for all four gates
+tools/gates/check_gates_test.py               fault injection for every gate
 tools/gates/expected-gates.txt                gates that must exist
 tools/qa/run-qa.sh                            runs the floor, writes durable evidence
 docs/DECISIONS.md                             empty register + schema
@@ -100,7 +100,7 @@ indefinitely.
 
 ## Adapting it
 
-`ID_PREFIX`, `REQUIRED_FIELDS`, `SOURCE_EXTENSIONS` and `CONFIG_CANDIDATES` are meant to be edited for your
+`ID_PREFIX`, the `REQUIRED_FIELDS_*` lists, `SOURCE_EXTENSIONS` and `CONFIG_CANDIDATES` are meant to be edited for your
 project and language. Adding a field is tailoring. Removing a check because something fails it is
 deleting the finding — the two look identical in a diff, so say which you are doing.
 
