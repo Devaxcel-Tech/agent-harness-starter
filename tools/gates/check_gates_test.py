@@ -112,6 +112,13 @@ def drop_field(root: Path, label: str) -> None:
 case("register absent is could-not-run, not a pass", "check_decisions.py",
      lambda t: (t / "docs" / "DECISIONS.md").unlink(), 2, "does not exist")
 
+# A register saved under a non-UTF-8 host encoding (Windows cp1252 writes the em-dash as byte
+# 0x97) is undecodable here. That is a COULD-NOT-RUN — a crash on read must never surface as a
+# VIOLATED row. cp1252 yields 0x97 on any host, so this case is locale-independent.
+case("a non-UTF-8 register is could-not-run, not a crashed violation", "check_decisions.py",
+     lambda t: (t / "docs" / "DECISIONS.md").write_text(
+         "# reg\n## DEC-1 — x\n\n- **Status:** OPEN\n", encoding="cp1252"), 2, "not valid UTF-8")
+
 case("a row with no issue link is rejected", "check_decisions.py",
      lambda t: set_field(t, "Issue", "will file one later"), 1, "delivery mechanism")
 

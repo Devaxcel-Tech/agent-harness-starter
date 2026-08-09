@@ -51,8 +51,12 @@ fi
 shopt -s nullglob
 for gate in tools/gates/check_*.py; do
   case "$gate" in *_test.py) continue ;; esac
-  if ! out="$(python3 "$gate" 2>&1)"; then
-    rc=$?
+  # Capture rc from the command directly. `if ! cmd; then rc=$?` would read 0, because the `!`
+  # the `if` consumed already inverted the status — so every failure printed "(exit 0)", erasing
+  # the very VIOLATED-vs-CANNOT_RUN distinction (1 vs 2) the message exists to surface.
+  out="$(python3 "$gate" 2>&1)"
+  rc=$?
+  if [ "$rc" -ne 0 ]; then
     echo "" >&2
     echo "pre-commit: FAILED — $gate (exit $rc)" >&2
     echo "$out" | sed 's/^/            /' >&2
