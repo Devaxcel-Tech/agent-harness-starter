@@ -35,8 +35,10 @@ Note `EXCLUDE_PARTS` skips `examples`, `fixtures` and `testdata` by default, on 
 hold sample data rather than shipped code. If your project keeps real source in one of those, remove
 it from the set — otherwise you get the silent pass this gate exists to prevent.
 
-EXIT CODES: 0 not applicable or obtainable · 1 source exists and it is unobtainable · 3 configured but
-the config does not reach the source. See harness.py; 3 is not a pass.
+EXIT CODES: 0 not applicable, or source present and mutation tooling configured · 1 source present and
+no mutation config found. This gate reaches its verdict from configuration PRESENCE — it does not
+inspect whether the config actually reaches the source, because that is language- and tool-specific,
+so it never emits 2 or 3. See harness.py; 2 and 3 are never a pass.
 """
 
 from __future__ import annotations
@@ -45,7 +47,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from harness import INCOMPLETE, VERIFIED, VIOLATED, repo_root, report  # noqa: E402
+from harness import VERIFIED, VIOLATED, repo_root, report  # noqa: E402
 
 ROOT = repo_root()
 
