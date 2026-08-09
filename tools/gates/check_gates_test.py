@@ -228,12 +228,38 @@ case("a top-level array manifest is could-not-run, not a crash", "check_vendored
 case("a non-object verbatim block is could-not-run, not a crash", "check_vendored_drift.py",
      lambda t: bad_manifest(t, {"verbatim": []}), 2, "not an object")
 
+# The file is PRESENT so the base gate reaches `expected[:16]` and crashes with TypeError (exit 1);
+# the validator must turn that into a clean exit 2 before any file is touched.
 case("a non-string verbatim hash is could-not-run, not a crash", "check_vendored_drift.py",
-     lambda t: bad_manifest(t, {"verbatim": {"real.md": 12345}}), 2, "not a string")
+     lambda t: ((t / "real.md").write_text("x\n", encoding="utf-8"),
+                bad_manifest(t, {"verbatim": {"real.md": 12345}})), 2, "not a string")
 
 case("a non-object templated entry is could-not-run, not a crash", "check_vendored_drift.py",
      lambda t: bad_manifest(t, {"upstream_marker": "X", "templated": {"docs/x.md": "a rule"}}),
      2, "not an object")
+
+case("a non-string upstream_marker is could-not-run, not a crash", "check_vendored_drift.py",
+     lambda t: bad_manifest(t, {"upstream_marker": True, "templated": {"t.md": {"rule": "r"}}}),
+     2, "non-empty string")
+
+case("a path that escapes the repo is could-not-run, not a pass", "check_vendored_drift.py",
+     lambda t: bad_manifest(t, {"verbatim": {"../escape.md": "0" * 64}}), 2, "repo-relative")
+
+# An over-long path component makes is_file() raise OSError (ENAMETOOLONG). That must be a could-not-run
+# for that entry, not an unhandled crash reported as a drift.
+case("an unreadable (over-long) path is could-not-run, not a crash", "check_vendored_drift.py",
+     lambda t: bad_manifest(t, {"verbatim": {("a" * 5000) + "/x.md": "0" * 64}}), 2, "could not be read")
+
+# REGRESSION PIN: a vendored file whose name starts with `_` (Netlify _headers, Jekyll _config.yml,
+# Sass _partial, Python __init__.py) must be checked like any other — the earlier `_`-skip silently
+# passed a drifted one. Here `_headers` is present but its content does not match the recorded hash.
+def drifted_underscore_file(root: Path) -> None:
+    (root / "_headers").write_text("locally changed\n", encoding="utf-8")
+    bad_manifest(root, {"upstream": "o/u", "revision": "r",
+                        "verbatim": {"_headers": "0" * 64}})
+
+case("a drifted `_`-prefixed vendored file is still flagged, not skipped", "check_vendored_drift.py",
+     drifted_underscore_file, 1, "drifted locally")
 
 # ── mutation applicability ───────────────────────────────────────────────────────────────────────
 case("no source is NOT APPLICABLE, and names the trigger", "check_mutation_applicability.py",

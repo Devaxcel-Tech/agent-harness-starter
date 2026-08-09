@@ -73,6 +73,21 @@ def sha256(p: Path) -> str:
     return hashlib.sha256(p.read_bytes()).hexdigest()
 
 
+def _unprobeable(rel: str, exc: OSError) -> int:
+    """A file the manifest lists but the OS refused to read (name too long, permission denied) is a
+    could-not-run for that entry — never a silent pass and never a drift. Reported as CANNOT_RUN so a
+    verdict is never invented for a file the gate could not actually look at.
+    """
+    return report(
+        "vendored drift",
+        CANNOT_RUN,
+        violations=[
+            f"{MANIFEST}: {rel!r} is declared vendored but could not be read: {exc}.\n"
+            "      The gate reached no verdict for it. Fix the path or the permission and re-run."
+        ],
+    )
+
+
 def manifest_structure_error(m: object) -> str | None:
     """Return a human message if the manifest is not a shape this gate can interpret, else None.
 
@@ -102,6 +117,20 @@ def manifest_structure_error(m: object) -> str | None:
         if not isinstance(spec, dict):
             return (f"{MANIFEST}: templated entry {rel!r} maps to a {type(spec).__name__}, not an "
                     "object. Each templated entry is `\"path\": {\"rule\": \"…\"}`.")
+    # Every path must stay inside the repository. An absolute path or one climbing out with `..` would
+    # be hashed as-is, and the gate would then certify "this repo's vendored files are unchanged" while
+    # having compared a file outside the repo — a verdict that is untrue about what it checked.
+    for block in ("verbatim", "templated"):
+        for rel in m.get(block, {}):
+            if rel.startswith("/") or "\\" in rel or ".." in rel.split("/"):
+                return (f"{MANIFEST}: entry {rel!r} is not a repo-relative path. Vendored paths must "
+                        "stay inside the repository (no leading `/`, no `..`).")
+    # Templated checking is impossible without a marker to search for, so it must be a non-empty string
+    # whenever there are templated entries. Guarded here rather than at use, where `marker in text`
+    # raises TypeError on a non-string (a crash reported as a drift).
+    if m.get("templated") and not (isinstance(m.get("upstream_marker"), str) and m["upstream_marker"]):
+        return (f"{MANIFEST}: `templated` entries need a non-empty string `upstream_marker` to check the "
+                "substitution against, and none is set. Nothing can be compared.")
     return None
 
 
@@ -142,7 +171,12 @@ def main() -> int:
 
     for rel, expected in sorted(m.get("verbatim", {}).items()):
         f = ROOT / rel
-        if not f.is_file():
+        try:
+            present = f.is_file()
+            actual = sha256(f) if present else None
+        except OSError as exc:
+            return _unprobeable(rel, exc)
+        if not present:
             drift.append(
                 f"MISSING — {rel}\n"
                 "      The manifest says this repo vendors it and it is not here. Either it was deleted\n"
@@ -150,7 +184,6 @@ def main() -> int:
             )
             continue
         checked += 1
-        actual = sha256(f)
         if actual != expected:
             drift.append(
                 f"DRIFTED LOCALLY — {rel}\n"
@@ -163,19 +196,19 @@ def main() -> int:
                 "      local edit and re-hash it, which is how a fork becomes permanent."
             )
 
+    # `manifest_structure_error` has already guaranteed a non-empty string `marker` whenever there are
+    # templated entries, so the substitution check below can rely on it.
     for rel, spec in sorted(m.get("templated", {}).items()):
         f = ROOT / rel
-        if not f.is_file():
+        try:
+            present = f.is_file()
+            text = f.read_text(encoding="utf-8", errors="replace") if present else None
+        except OSError as exc:
+            return _unprobeable(rel, exc)
+        if not present:
             drift.append(f"MISSING — {rel} (templated: {spec.get('rule', '?')})")
             continue
         checked += 1
-        if not marker:
-            drift.append(
-                f"{rel} is declared templated, but the manifest sets no `upstream_marker`, so there is\n"
-                "      nothing to check the substitution against. Add the string that must NOT survive."
-            )
-            continue
-        text = f.read_text(encoding="utf-8", errors="replace")
         if marker in text:
             drift.append(
                 f"TEMPLATE HALF-SUBSTITUTED — {rel}\n"
