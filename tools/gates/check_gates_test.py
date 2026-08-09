@@ -198,23 +198,42 @@ case("an unchanged shared file passes", "check_vendored_drift.py",
 case("an unreadable manifest is could-not-run, not a pass", "check_vendored_drift.py",
      lambda t: (t / "tools" / "gates" / "vendored.json").write_text("{ not json", encoding="utf-8"), 2, "unreadable")
 
-# A `_`-prefixed key is a human annotation (the JSON-comment convention examples/vendored.json uses),
-# not a file row. It must be ignored, not iterated as a path — that was how the kit's own template
-# crashed this gate.
-case("an annotation key is ignored, not read as a file", "check_vendored_drift.py",
-     lambda t: (t / "tools" / "gates" / "vendored.json").write_text(json.dumps({
-         "upstream": "example/upstream", "revision": "abc123",
-         "verbatim": {"_note": "path -> sha256"},
-         "templated": {"_note": "path -> rule"},
-     }), encoding="utf-8"), 0)
+# A top-level annotation key is ignored (the gate reads named keys, never iterates them), so a manifest
+# carrying a `_comment` next to a real, unchanged entry still passes. This is the ONLY place annotations
+# are tolerated — inside verbatim/templated every key is a real path.
+def annotated_ok(root: Path) -> None:
+    shared = root / "shared.md"
+    shared.write_text("upstream content\n", encoding="utf-8")
+    import hashlib
+    h = hashlib.sha256(shared.read_bytes()).hexdigest()
+    (root / "tools" / "gates" / "vendored.json").write_text(json.dumps({
+        "_comment": "notes belong up here", "upstream": "example/upstream", "revision": "abc123",
+        "verbatim": {"shared.md": h},
+    }), encoding="utf-8")
 
-# A templated entry whose value is not an object cannot be interpreted. That is a could-not-run —
-# it must NOT crash with an unhandled AttributeError (which exits 1 and reads as a real violation).
-case("a malformed templated entry is could-not-run, not a crash", "check_vendored_drift.py",
-     lambda t: (t / "tools" / "gates" / "vendored.json").write_text(json.dumps({
-         "upstream": "example/upstream", "revision": "abc123", "upstream_marker": "X",
-         "templated": {"docs/x.md": "slug substituted"},
-     }), encoding="utf-8"), 2, "not an object")
+case("a top-level annotation key does not stop a valid manifest passing", "check_vendored_drift.py",
+     annotated_ok, 0)
+
+# ── malformed manifests are could-not-run, never a crash and never a silent pass ─────────────────
+# Every shape below would raise partway through the comparison (AttributeError on a non-dict, TypeError
+# slicing a non-string hash) and exit 1 — a could-not-run masquerading as a real drift. Up-front
+# structure validation must turn each into a clean exit 2.
+def bad_manifest(root: Path, obj) -> None:
+    (root / "tools" / "gates" / "vendored.json").write_text(
+        obj if isinstance(obj, str) else json.dumps(obj), encoding="utf-8")
+
+case("a top-level array manifest is could-not-run, not a crash", "check_vendored_drift.py",
+     lambda t: bad_manifest(t, []), 2, "not an object")
+
+case("a non-object verbatim block is could-not-run, not a crash", "check_vendored_drift.py",
+     lambda t: bad_manifest(t, {"verbatim": []}), 2, "not an object")
+
+case("a non-string verbatim hash is could-not-run, not a crash", "check_vendored_drift.py",
+     lambda t: bad_manifest(t, {"verbatim": {"real.md": 12345}}), 2, "not a string")
+
+case("a non-object templated entry is could-not-run, not a crash", "check_vendored_drift.py",
+     lambda t: bad_manifest(t, {"upstream_marker": "X", "templated": {"docs/x.md": "a rule"}}),
+     2, "not an object")
 
 # ── mutation applicability ───────────────────────────────────────────────────────────────────────
 case("no source is NOT APPLICABLE, and names the trigger", "check_mutation_applicability.py",

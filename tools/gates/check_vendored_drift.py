@@ -45,6 +45,13 @@ SETUP: create `tools/gates/vendored.json` — see `examples/vendored.json` in th
 absent this gate reports NOT APPLICABLE and passes, because a single-repo project has nothing to
 share and should not be nagged.
 
+A malformed manifest is a could-not-run, not a crash and not a pass. The structure is validated up
+front (`manifest_structure_error`), so a manifest that is the wrong shape — top level not an object, a
+`verbatim`/`templated` block not a map, a hash that is not a string, a templated value that is not an
+object — reaches ONE clean exit-2 verdict instead of raising partway through and exiting 1, which would
+read as a real drift. Annotation keys are tolerated only at the top level; inside the maps every key is
+a real vendored path and is checked as one.
+
 EXIT CODES: 0 verified · 1 drifted or missing · 2 could not run.
 """
 
@@ -64,6 +71,38 @@ MANIFEST = Path("tools/gates/vendored.json")
 
 def sha256(p: Path) -> str:
     return hashlib.sha256(p.read_bytes()).hexdigest()
+
+
+def manifest_structure_error(m: object) -> str | None:
+    """Return a human message if the manifest is not a shape this gate can interpret, else None.
+
+    Structure is validated ONCE, up front, so a malformed manifest becomes a single clean could-not-run
+    rather than a crash partway through the comparison. Every shape rejected here would otherwise raise
+    — `.items()` on a non-dict, `expected[:16]` on a non-string hash — and exit 1, which reads as a real
+    drift when in truth nothing was compared. That is precisely the could-not-run-as-a-violation this
+    whole harness exists to remove, so the gate must never do it to its own manifest.
+
+    Note: annotation keys (`_comment`, `_note`) are only ignored at the TOP LEVEL, because the gate
+    reads named top-level keys and never iterates them. Inside `verbatim`/`templated` every key is a
+    real vendored path — there is no skip-by-name, so a genuinely vendored file called `_headers` or
+    `__init__.py` is checked like any other rather than silently dropped.
+    """
+    if not isinstance(m, dict):
+        return (f"{MANIFEST}: the top level is a {type(m).__name__}, not an object. A manifest is a "
+                "JSON object with `verbatim` and/or `templated` maps.")
+    for block in ("verbatim", "templated"):
+        if block in m and not isinstance(m[block], dict):
+            return (f"{MANIFEST}: `{block}` is a {type(m[block]).__name__}, not an object. It must map "
+                    "each vendored path to its check.")
+    for rel, expected in m.get("verbatim", {}).items():
+        if not isinstance(expected, str):
+            return (f"{MANIFEST}: verbatim entry {rel!r} maps to a {type(expected).__name__}, not a "
+                    "string. Each verbatim entry is `\"path\": \"<sha256>\"`.")
+    for rel, spec in m.get("templated", {}).items():
+        if not isinstance(spec, dict):
+            return (f"{MANIFEST}: templated entry {rel!r} maps to a {type(spec).__name__}, not an "
+                    "object. Each templated entry is `\"path\": {\"rule\": \"…\"}`.")
+    return None
 
 
 def main() -> int:
@@ -91,6 +130,10 @@ def main() -> int:
             violations=[f"{MANIFEST} is unreadable: {exc}. Nothing can be compared."],
         )
 
+    structure_error = manifest_structure_error(m)
+    if structure_error:
+        return report("vendored drift", CANNOT_RUN, violations=[structure_error])
+
     upstream = m.get("upstream", "(unrecorded)")
     revision = m.get("revision", "(unrecorded)")
     marker = m.get("upstream_marker")
@@ -98,11 +141,6 @@ def main() -> int:
     checked = 0
 
     for rel, expected in sorted(m.get("verbatim", {}).items()):
-        # A leading underscore marks a human annotation (`_note`, `_comment`), not a file row — the
-        # same JSON-comment convention examples/vendored.json uses. Iterating it as a path is how the
-        # kit's own template used to crash this gate.
-        if rel.startswith("_"):
-            continue
         f = ROOT / rel
         if not f.is_file():
             drift.append(
@@ -126,21 +164,6 @@ def main() -> int:
             )
 
     for rel, spec in sorted(m.get("templated", {}).items()):
-        if rel.startswith("_"):
-            continue
-        if not isinstance(spec, dict):
-            return report(
-                "vendored drift",
-                CANNOT_RUN,
-                violations=[
-                    f"{MANIFEST}: templated entry {rel!r} maps to a {type(spec).__name__}, not an "
-                    "object.\n"
-                    "      Each templated entry must be `{\"rule\": \"…\"}`. The manifest cannot be "
-                    "interpreted,\n"
-                    "      so this reaches no verdict — a malformed manifest is a could-not-run, never a "
-                    "pass."
-                ],
-            )
         f = ROOT / rel
         if not f.is_file():
             drift.append(f"MISSING — {rel} (templated: {spec.get('rule', '?')})")
