@@ -41,8 +41,8 @@ WHAT THIS GATE ENFORCES, and the reason for each.
      id must write it unnumbered (`DEC-<n>`), because a real number in a comment is a citation the
      scan will rightly demand a row for.
 
-TAILOR, DO NOT WEAKEN. `ID_PREFIX`, `REQUIRED_FIELDS` and `STATUSES` are meant to be edited to fit
-your project. Removing a check because a row fails it is not tailoring — it is deleting the finding.
+TAILOR, DO NOT WEAKEN. `ID_PREFIX`, the `REQUIRED_FIELDS_*` lists and `STATUSES` are meant to be edited
+to fit your project. Removing a check because a row fails it is not tailoring — it is deleting the finding.
 
 EXIT CODES: 0 verified · 1 violated · 2 could not run. See harness.py; 2 is not a pass.
 """

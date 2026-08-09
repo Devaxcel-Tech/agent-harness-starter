@@ -66,6 +66,10 @@ SOURCE_EXTENSIONS = {
     ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".py", ".go", ".rs", ".java", ".kt", ".kts",
     ".rb", ".cs", ".swift", ".scala", ".php", ".c", ".cc", ".cpp", ".h", ".hpp", ".m", ".mm",
 }
+# NOTE: these defaults are JS/TS only, while SOURCE_EXTENSIONS spans ~15 languages. A repo whose ONLY
+# code is test files in another language (Go `foo_test.go`, Python `test_foo.py`, Rust `#[cfg(test)]`
+# modules) will count them as product source and report UNOBTAINABLE. That fails LOUD (never a silent
+# pass), but if it surprises you, add your language's test pattern here — this tuple is meant to be tailored.
 TEST_SUFFIXES = (".test.ts", ".spec.ts", "_test.ts", ".test.js", ".spec.js", ".d.ts")
 # Any one of these existing means the tooling is present. Add your language's equivalent —
 # stryker.conf.json (JS/TS), pom.xml with PIT, mutmut.ini / setup.cfg (Python), cargo-mutants.toml.

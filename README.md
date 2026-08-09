@@ -49,8 +49,12 @@ obligation. It cannot prove a live run **obeyed** them. No static check reaches 
 # 0. Turn on branch protection. Without it every control below only advises.
 #    Verify:  gh api repos/<org>/<repo>/branches/main/protection
 
-# 1. Copy the kit in
-cp -r tools/gates tools/qa .githooks .gitleaks.toml docs/DECISIONS.md <your-repo>/
+# 1. Copy the kit in (preserving paths — the gates resolve each other by relative path)
+mkdir -p <your-repo>/tools <your-repo>/docs <your-repo>/.github/workflows
+cp -r tools/gates tools/qa <your-repo>/tools/
+cp -r .githooks <your-repo>/
+cp .gitleaks.toml <your-repo>/
+cp docs/DECISIONS.md <your-repo>/docs/
 cp examples/workflows/*.yml <your-repo>/.github/workflows/
 
 # 2. Prove the gates can fail — run this FIRST, it validates the validators
@@ -77,6 +81,7 @@ docs/DECISIONS.md                             empty register + schema
 docs/pattern-handbook.html/.pdf               why each control exists
 docs/adoption-guide.html/.pdf                 how to install it, in stages
 .githooks/pre-commit                          discovers and runs every gate
+examples/skills/task-loop/SKILL.md            the loop itself — the thing that runs the gates
 examples/workflows/                           gates + secret-scan templates
 .gitleaks.toml                                secret-scanning config
 examples/vendored.json                        drift manifest template
