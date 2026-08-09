@@ -98,6 +98,11 @@ def main() -> int:
     checked = 0
 
     for rel, expected in sorted(m.get("verbatim", {}).items()):
+        # A leading underscore marks a human annotation (`_note`, `_comment`), not a file row — the
+        # same JSON-comment convention examples/vendored.json uses. Iterating it as a path is how the
+        # kit's own template used to crash this gate.
+        if rel.startswith("_"):
+            continue
         f = ROOT / rel
         if not f.is_file():
             drift.append(
@@ -121,6 +126,21 @@ def main() -> int:
             )
 
     for rel, spec in sorted(m.get("templated", {}).items()):
+        if rel.startswith("_"):
+            continue
+        if not isinstance(spec, dict):
+            return report(
+                "vendored drift",
+                CANNOT_RUN,
+                violations=[
+                    f"{MANIFEST}: templated entry {rel!r} maps to a {type(spec).__name__}, not an "
+                    "object.\n"
+                    "      Each templated entry must be `{\"rule\": \"…\"}`. The manifest cannot be "
+                    "interpreted,\n"
+                    "      so this reaches no verdict — a malformed manifest is a could-not-run, never a "
+                    "pass."
+                ],
+            )
         f = ROOT / rel
         if not f.is_file():
             drift.append(f"MISSING — {rel} (templated: {spec.get('rule', '?')})")

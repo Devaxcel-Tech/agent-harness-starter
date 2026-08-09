@@ -198,6 +198,24 @@ case("an unchanged shared file passes", "check_vendored_drift.py",
 case("an unreadable manifest is could-not-run, not a pass", "check_vendored_drift.py",
      lambda t: (t / "tools" / "gates" / "vendored.json").write_text("{ not json", encoding="utf-8"), 2, "unreadable")
 
+# A `_`-prefixed key is a human annotation (the JSON-comment convention examples/vendored.json uses),
+# not a file row. It must be ignored, not iterated as a path — that was how the kit's own template
+# crashed this gate.
+case("an annotation key is ignored, not read as a file", "check_vendored_drift.py",
+     lambda t: (t / "tools" / "gates" / "vendored.json").write_text(json.dumps({
+         "upstream": "example/upstream", "revision": "abc123",
+         "verbatim": {"_note": "path -> sha256"},
+         "templated": {"_note": "path -> rule"},
+     }), encoding="utf-8"), 0)
+
+# A templated entry whose value is not an object cannot be interpreted. That is a could-not-run —
+# it must NOT crash with an unhandled AttributeError (which exits 1 and reads as a real violation).
+case("a malformed templated entry is could-not-run, not a crash", "check_vendored_drift.py",
+     lambda t: (t / "tools" / "gates" / "vendored.json").write_text(json.dumps({
+         "upstream": "example/upstream", "revision": "abc123", "upstream_marker": "X",
+         "templated": {"docs/x.md": "slug substituted"},
+     }), encoding="utf-8"), 2, "not an object")
+
 # ── mutation applicability ───────────────────────────────────────────────────────────────────────
 case("no source is NOT APPLICABLE, and names the trigger", "check_mutation_applicability.py",
      lambda t: None, 0, "trigger")
