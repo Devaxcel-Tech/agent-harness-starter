@@ -21,7 +21,9 @@
 set -uo pipefail
 
 root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-cd "$root" || exit 0
+# A could-not-run must never be a silent pass — exit 0 here would let the commit through with NO gate
+# having run. Block instead, matching the interpreter guard below.
+cd "$root" || { echo "pre-commit: could not enter the repo root, so no gate could run." >&2; exit 1; }
 
 # NOT `command -v python3` — on stock Windows that resolves to the App Execution Alias stub,
 # which is present on PATH but exits nonzero with a Microsoft Store prompt instead of running

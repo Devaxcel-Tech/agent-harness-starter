@@ -209,6 +209,18 @@ def main() -> int:
                 "      as a VIOLATED row. Re-save docs/DECISIONS.md as UTF-8."
             ],
         )
+    except OSError as exc:
+        return report(
+            "decision register",
+            CANNOT_RUN,
+            violations=[
+                f"{REGISTER} exists but could not be read: {exc}.\n"
+                "      This is a COULD-NOT-RUN, not a violation — a register the gate cannot open (a\n"
+                "      permission problem on a shared checkout, say) reaches no verdict. The citation\n"
+                "      scan guards the same operation with `except OSError`; this read must too, so an\n"
+                "      unreadable register is never a crash reported as a VIOLATED row."
+            ],
+        )
 
     text = strip_fences(raw)
     rows = parse_rows(text)
