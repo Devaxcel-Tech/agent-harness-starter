@@ -49,8 +49,12 @@ obligation. It cannot prove a live run **obeyed** them. No static check reaches 
 # 0. Turn on branch protection. Without it every control below only advises.
 #    Verify:  gh api repos/<org>/<repo>/branches/main/protection
 
-# 1. Copy the kit in
-cp -r tools/gates tools/qa .githooks .gitleaks.toml docs/DECISIONS.md <your-repo>/
+# 1. Copy the kit in (preserving paths — the gates resolve each other by relative path)
+mkdir -p <your-repo>/tools <your-repo>/docs <your-repo>/.github/workflows
+cp -r tools/gates tools/qa <your-repo>/tools/
+cp -r .githooks <your-repo>/
+cp .gitleaks.toml <your-repo>/
+cp docs/DECISIONS.md <your-repo>/docs/
 cp examples/workflows/*.yml <your-repo>/.github/workflows/
 
 # 2. Prove the gates can fail — run this FIRST, it validates the validators
@@ -68,13 +72,16 @@ tools/gates/harness.py                        the exit-code contract
 tools/gates/check_decisions.py                decision register gate
 tools/gates/check_vendored_drift.py           shared-file drift gate
 tools/gates/check_mutation_applicability.py   a worked trigger gate
-tools/gates/check_gates_test.py               fault injection for all three (22 cases)
+tools/gates/check_loop_obligations.py         the loop still carries every obligation
+tools/gates/loop-obligations.expected         the obligations, authored from the handbook
+tools/gates/check_gates_test.py               fault injection for every gate
 tools/gates/expected-gates.txt                gates that must exist
 tools/qa/run-qa.sh                            runs the floor, writes durable evidence
 docs/DECISIONS.md                             empty register + schema
 docs/pattern-handbook.html/.pdf               why each control exists
 docs/adoption-guide.html/.pdf                 how to install it, in stages
 .githooks/pre-commit                          discovers and runs every gate
+examples/skills/task-loop/SKILL.md            the loop itself — the thing that runs the gates
 examples/workflows/                           gates + secret-scan templates
 .gitleaks.toml                                secret-scanning config
 examples/vendored.json                        drift manifest template
@@ -98,7 +105,7 @@ indefinitely.
 
 ## Adapting it
 
-`ID_PREFIX`, `REQUIRED_FIELDS`, `SOURCE_GLOBS` and `CONFIG_CANDIDATES` are meant to be edited for your
+`ID_PREFIX`, the `REQUIRED_FIELDS_*` lists, `SOURCE_EXTENSIONS` and `CONFIG_CANDIDATES` are meant to be edited for your
 project and language. Adding a field is tailoring. Removing a check because something fails it is
 deleting the finding — the two look identical in a diff, so say which you are doing.
 
