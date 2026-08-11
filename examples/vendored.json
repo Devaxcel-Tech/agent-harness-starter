@@ -1,15 +1,15 @@
 {
-  "_comment": "Template for tools/gates/vendored.json. Copy it there and fill it in when you first copy a shared file in from another repository. Regenerate hashes whenever you re-copy — and re-copy rather than editing locally.",
+  "_comment": "Template for tools/gates/vendored.json. Copy it there and fill it in when you first copy a shared file in from another repository. Regenerate hashes whenever you re-copy — and re-copy rather than editing locally. Annotation keys like this one are read only at the TOP LEVEL; the `verbatim` and `templated` maps must contain nothing but real vendored paths, because every key inside them is checked as a file.",
   "upstream": "your-org/your-upstream-repo",
   "revision": "the commit these files were copied from",
   "upstream_marker": "UPSTREAM-SLUG",
-  "_marker_note": "A string that appears in the upstream original and must NOT survive templating. Usually the upstream repo or org name. The gate uses it to prove a substitution was completed.",
+  "_marker_note": "upstream_marker: a string that appears in the upstream original and must NOT survive templating. Usually the upstream repo or org name. The gate uses it to prove a substitution was completed.",
+  "_verbatim_note": "verbatim: each path maps to its upstream sha256. Byte-identical to upstream, deliberately, so drift is detectable.",
   "verbatim": {
-    "_note": "path -> sha256. Byte-identical to upstream, deliberately, so drift is detectable.",
     ".github/workflows/secret-scan.yml": "REPLACE_WITH_SHA256"
   },
+  "_templated_note": "templated: each path maps to an object describing the known substitution; checked for completeness (no upstream_marker survives).",
   "templated": {
-    "_note": "path -> rule. Differs from upstream by a known substitution; checked for completeness.",
     "docs/REVIEW.md": { "rule": "upstream slug replaced with this repo's" }
   }
 }
