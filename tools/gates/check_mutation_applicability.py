@@ -75,6 +75,7 @@ TEST_SUFFIXES = (".test.ts", ".spec.ts", "_test.ts", ".test.js", ".spec.js", ".d
 # stryker.conf.json (JS/TS), pom.xml with PIT, mutmut.ini / setup.cfg (Python), cargo-mutants.toml.
 CONFIG_CANDIDATES = [
     "stryker.config.json", "stryker.conf.json", ".stryker.conf.json",
+    "stryker.conf.mjs", "stryker.conf.cjs", ".stryker.conf.mjs", ".stryker.conf.cjs",
     "tools/qa/stryker.config.json", "mutmut.ini", "cargo-mutants.toml",
 ]
 EXCLUDE_PARTS = {

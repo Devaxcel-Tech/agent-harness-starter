@@ -26,3 +26,19 @@ They partition the ways a change goes wrong, with as little overlap as possible:
    from the same model family, this panel gives you *lens* diversity but not *lineage* diversity. Both
    are worth having and they are not substitutes — see the different-lineage reviewer in the Pattern
    Handbook.
+
+## Example model-tiered agents (optional QA workflow layer)
+
+`qa-fast-check.md`, `qa-standard-review.md`, `qa-deep-review.md` are a different kind of example —
+illustrative only, copy and rename into a project's own agent config (e.g. `.claude/agents/`) if it
+wants `tools/qa-workflow/route-task.py`'s recommendations to map onto real subagents. Nothing in
+`core/` or `tools/` requires these exact names; `router.tiers.*.agent` in a project's `qa.config.yaml`
+is what actually connects a tier to an agent, and it can point at any agent name a project already has.
+
+| File | Tier | Model |
+|---|---|---|
+| `qa-fast-check.md` | `fast` | `haiku` |
+| `qa-standard-review.md` | `standard` | `sonnet` |
+| `qa-deep-review.md` | `deep` | `opus` |
+
+See `core/model-router-contract.md` for how a task lands in a tier in the first place.

@@ -1,0 +1,42 @@
+# qa.config.yaml — the ONE project-specific file this kit reads.
+#
+# Deliberately flat, dotted keys, one `key: value` per line. See qa.config.schema.json for what each
+# key means and which are required. This example describes a fictional project — copy it to your
+# project's repo root as `qa.config.yaml` and replace every value.
+
+project.name: acme-storefront-web
+project.techStack: node-vue
+
+# Repo-relative command that runs the Agent Development Harness's gate floor.
+harness.runCommand: tools/qa/run-qa.sh
+
+# Where the E2E project lives, and how to run it.
+e2e.path: e2e
+e2e.regressionCommand: npm run test:regression
+e2e.ticketCommand: npm test -- --grep {ticketId}
+
+# Optional — additional browser/UI engines beyond Playwright. Omit entirely for single-engine
+# projects (defaults to "playwright" alone). Uncomment to also drive Claude in Chrome:
+# e2e.engines: playwright,claude-in-chrome
+# e2e.claudeInChrome.scenarios: e2e/data/browser-explore
+# e2e.claudeInChrome.baseUrlEnv: QA_BASE_URL
+
+# Optional — model/task routing recommendations (advisory only; this kit never calls a model or
+# switches one for you — see core/model-router-contract.md). Omit entirely to leave routing off:
+# router.enabled: true
+# router.riskPaths: src/services/auth*,src/**/*cognito*,src/**/*phi*
+# router.riskKeywords: cognito,oauth,phi,patient,payment
+# router.tiers.fast.agent: qa-fast-check
+# router.tiers.standard.agent: qa-standard-review
+# router.tiers.deep.agent: qa-deep-review
+
+# Where result records and case evidence are written (repo-relative).
+evidence.root: reports/qa-workflow
+
+# Tracker/publisher adapters — named here, implemented by whatever tool the project's own
+# CLAUDE.md or agent config already wires up (an MCP bridge, a CLI, etc). This kit never calls
+# a tracker or publisher API directly.
+tracker.type: jira
+tracker.projectKey: ACME
+publisher.type: confluence
+publisher.target: qa

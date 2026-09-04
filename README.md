@@ -85,10 +85,57 @@ examples/skills/task-loop/SKILL.md            the loop itself — the thing that
 examples/workflows/                           gates + secret-scan templates
 .gitleaks.toml                                secret-scanning config
 examples/vendored.json                        drift manifest template
-examples/agents/                              four review lenses
+examples/agents/                              four review lenses + three QA-tier agent examples
 examples/tool-servers.json.example            tool-server config template
 examples/session-start.sh                     grounding hook
 examples/CODEOWNERS.example                   review routing
+```
+
+### Optional layer: QA workflow framework
+
+`core/`, `qa.config.schema.json` and `tools/qa-workflow/` are a separate, optional layer that sits
+**around** the harness above, turning its exit-code gates and a project's own Playwright (or other) E2E
+suite into two repeatable QA workflows — ticket/feature testing and regression — with one shared result
+contract: **PASS / FAIL / BLOCKED**. It imports the harness's exit-code vocabulary rather than redefining
+it, so install the harness first.
+
+```
+core/                              contracts — never edited per project
+  result.schema.json                 the canonical result shape and its PASS/FAIL/BLOCKED rollup rule
+  case-result.schema.json            the shape one engine writes per case (results/<CASE-ID>.json)
+  e2e-engine-contract.md             what a Playwright/Claude-in-Chrome (or other) engine must expose
+  model-router-contract.md           what tools/qa-workflow/route-task.py decides, and why it never enforces it
+  jira-workflow-contract.md          Workflow 1 (ticket/feature testing), stage by stage
+  regression-workflow-contract.md    Workflow 2 (regression), stage by stage
+qa.config.schema.json              the one file a project fills in — schema for its qa.config.yaml
+tools/qa-workflow/
+  run-qa-workflow.sh                 runs harness + E2E (all configured engines), writes the result record
+  aggregate-e2e-results.py           rolls up one agent-driven engine's case-result files into a verdict
+  route-task.py                      recommends a model tier (fast/standard/deep) for a task — advisory only
+  check_result_contract.py           gate: every result record on disk is well-formed and honestly rolled up
+  check_qa_config.py                 gate: qa.config.yaml satisfies the schema
+examples/qa.config.example.yaml    a filled-in example (fictional project)
+examples/skills/qa-ticket-flow/    orchestrator for Workflow 1
+examples/skills/qa-regression-flow/  orchestrator for Workflow 2
+examples/skills/qa-browser-explore/  the claude-in-chrome engine — agent-driven browser session
+docs/qa-workflow-pattern-handbook.md   why each stage exists, what failure it removes
+docs/qa-workflow-adoption-guide.md     how to install this layer into a project, in stages
+```
+
+Same design rule as the rest of the kit: **common core, project-specific config — never the reverse**.
+Nothing under `core/` or `tools/qa-workflow/` names a project, a tracker, or a technology stack — every
+project-specific fact (which issue tracker, which Playwright project, which test command) lives in one
+file the project owns, `qa.config.yaml`.
+
+```bash
+# after the harness itself is installed (see Quickest useful path above)
+mkdir -p <your-repo>/tools/qa-workflow
+cp -r tools/qa-workflow/*.sh tools/qa-workflow/*.py <your-repo>/tools/qa-workflow/
+cp qa.config.schema.json <your-repo>/tools/qa-workflow/
+cp examples/qa.config.example.yaml <your-repo>/qa.config.yaml   # then edit it — see docs/qa-workflow-adoption-guide.md
+
+python3 <your-repo>/tools/qa-workflow/check_qa_config.py
+bash <your-repo>/tools/qa-workflow/run-qa-workflow.sh regression
 ```
 
 ## Two things to know before you start

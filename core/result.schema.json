@@ -1,0 +1,90 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://agent-harness-starter/core/result.schema.json",
+  "title": "QA workflow result",
+  "description": "The one record either workflow produces. A run that has not reached QA Verification yet is a legitimate, honest partial record — qaVerification.verdict is PENDING, and finalResult is not computed until every stage has a verdict. A tool that fills PENDING in with PASS to make the record look complete has reintroduced the exact defect this contract exists to prevent.",
+  "type": "object",
+  "required": ["schemaVersion", "workflow", "scope", "generatedAt", "stages", "finalResult"],
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "workflow": {
+      "type": "string",
+      "enum": ["ticket", "regression"],
+      "description": "Which of the two workflows produced this record."
+    },
+    "scope": {
+      "type": "object",
+      "required": ["id"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Ticket ID for workflow=ticket (e.g. PROJ-1234); suite/tag name for workflow=regression."
+        },
+        "ticketUrl": { "type": ["string", "null"] },
+        "prUrl": { "type": ["string", "null"] }
+      }
+    },
+    "generatedAt": { "type": "string", "format": "date-time" },
+    "commit": { "type": ["string", "null"], "description": "Short SHA the run was taken against." },
+    "stages": {
+      "type": "object",
+      "required": ["harness", "e2e", "qaVerification"],
+      "properties": {
+        "harness": { "$ref": "#/definitions/stage" },
+        "e2e": { "$ref": "#/definitions/e2eStage" },
+        "qaVerification": { "$ref": "#/definitions/verificationStage" }
+      }
+    },
+    "finalResult": {
+      "type": "string",
+      "enum": ["PASS", "FAIL", "BLOCKED", "PENDING"],
+      "description": "Worst-of the three stage verdicts, in the order FAIL > BLOCKED > PENDING > PASS. PENDING means qaVerification has not been recorded yet — a consumer must treat PENDING exactly like a missing result, never like a pass."
+    }
+  },
+  "definitions": {
+    "stage": {
+      "type": "object",
+      "required": ["verdict", "evidencePath"],
+      "properties": {
+        "verdict": { "type": "string", "enum": ["PASS", "FAIL", "BLOCKED"] },
+        "evidencePath": { "type": "string", "description": "Repo-relative path to the durable evidence this verdict was read from." },
+        "detail": { "type": "string" }
+      }
+    },
+    "e2eStage": {
+      "type": "object",
+      "required": ["verdict", "evidencePath"],
+      "properties": {
+        "verdict": { "type": "string", "enum": ["PASS", "FAIL", "BLOCKED", "CANNOT_AUTOMATE", "NOT_EXECUTED"] },
+        "evidencePath": { "type": "string" },
+        "cases": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "verdict"],
+            "properties": {
+              "id": { "type": "string", "description": "Case ID, per core/e2e-engine-contract.md's ID convention." },
+              "verdict": { "type": "string", "enum": ["PASS", "FAIL", "BLOCKED", "CANNOT_AUTOMATE", "NOT_EXECUTED"] },
+              "engine": { "type": "string", "description": "Optional. Which engine produced this case, e.g. 'playwright' or 'claude-in-chrome' — see core/e2e-engine-contract.md §8 and core/case-result.schema.json. Omitted for older records or engines that predate this field; absence is not a violation." },
+              "note": { "type": "string" }
+            }
+          }
+        },
+        "detail": { "type": "string" }
+      }
+    },
+    "verificationStage": {
+      "type": "object",
+      "required": ["verdict"],
+      "properties": {
+        "verdict": { "type": "string", "enum": ["PASS", "FAIL", "BLOCKED", "PENDING"] },
+        "reviewer": {
+          "type": ["string", "null"],
+          "description": "Identity of the independent verifier. Must not equal the authoring commit's identity — see core/jira-workflow-contract.md, independence rule."
+        },
+        "notes": { "type": ["string", "null"] },
+        "recordedAt": { "type": ["string", "null"], "format": "date-time" }
+      }
+    }
+  }
+}

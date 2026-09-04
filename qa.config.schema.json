@@ -1,0 +1,38 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://agent-harness-starter/qa.config.schema.json",
+  "title": "qa.config.yaml",
+  "description": "The one project-specific file this kit reads. Deliberately FLAT dotted keys (`a.b.c: value`), one per line, no nesting — the same no-third-party-dependency rule the harness holds itself to: a real YAML library is not required to parse it, so tools/run-qa-workflow.sh can read it with grep/cut alone and never fails because a dependency was not installed. Adding a field is tailoring; giving a value nested structure is not — flatten it to a dotted key instead.",
+  "type": "object",
+  "required": [
+    "project.name",
+    "project.techStack",
+    "harness.runCommand",
+    "e2e.path",
+    "e2e.regressionCommand",
+    "e2e.ticketCommand",
+    "evidence.root"
+  ],
+  "properties": {
+    "project.name": { "type": "string", "description": "Human-readable project name. Never used to branch logic — for display in reports only." },
+    "project.techStack": { "type": "string", "description": "Free text, e.g. 'node-vue', 'flutter', 'node-graphql'. Also for display only; this kit never special-cases a stack." },
+    "harness.runCommand": { "type": "string", "description": "Repo-relative command that runs the Agent Development Harness's gate floor and exits per its four-code contract, e.g. 'tools/qa/run-qa.sh'." },
+    "e2e.path": { "type": "string", "description": "Repo-relative directory the E2E project lives in. Commands below run with this as their working directory." },
+    "e2e.regressionCommand": { "type": "string", "description": "Command that runs the full/tagged regression suite, e.g. 'npm run test:regression'." },
+    "e2e.ticketCommand": { "type": "string", "description": "Command template that runs cases scoped to one ticket ID; '{ticketId}' is substituted, e.g. 'npm test -- --grep {ticketId}'." },
+    "e2e.engines": { "type": "string", "description": "Optional. Comma-separated list of browser/UI engines contributing to the E2E stage, e.g. 'playwright' or 'playwright,claude-in-chrome'. Defaults to 'playwright' alone when omitted — existing single-engine projects need no change. 'playwright' is scripted (driven by e2e.ticketCommand/e2e.regressionCommand, unchanged). 'claude-in-chrome' is agent-driven: it has no command; see e2e-engine-contract.md §8 and case-result.schema.json." },
+    "e2e.claudeInChrome.scenarios": { "type": "string", "description": "Repo-relative path to the data file(s) describing what a Claude-in-Chrome session should check — case IDs, starting routes, expected outcomes. Data only, never selectors or code (e2e-engine-contract.md §1). Required only if 'claude-in-chrome' is listed in e2e.engines." },
+    "e2e.claudeInChrome.baseUrlEnv": { "type": "string", "description": "Name of an environment variable — never a literal URL — that the qa-browser-explore skill reads for the target environment's base URL. Required only if 'claude-in-chrome' is listed in e2e.engines." },
+    "evidence.root": { "type": "string", "description": "Repo-relative directory results and case evidence are written under, per e2e-engine-contract.md §4." },
+    "tracker.type": { "type": "string", "description": "e.g. 'jira', 'linear', 'github-issues', or 'none'. Names which adapter the orchestrator skill should use to fetch/comment on a ticket — this kit does not implement the adapter itself." },
+    "tracker.projectKey": { "type": "string", "description": "e.g. a Jira project key. Meaningless, and omittable, when tracker.type is 'none'." },
+    "publisher.type": { "type": "string", "description": "e.g. 'confluence', 'notion', or 'none'. Where a rendered report gets published, if anywhere." },
+    "publisher.target": { "type": "string", "description": "e.g. a Confluence space key. Omittable when publisher.type is 'none'." },
+    "router.enabled": { "type": "string", "description": "Optional. 'true' to opt into tools/route-task.py's task/model tier recommendations; omit or 'false' to leave routing off (default). Advisory only — this kit never calls a model or switches one; see core/model-router-contract.md." },
+    "router.riskPaths": { "type": "string", "description": "Optional, comma-separated glob patterns (fnmatch-style, repo-relative) that always force the 'deep' tier regardless of any other signal, e.g. 'src/services/auth*,src/**/*cognito*'. Meaningful only when router.enabled is 'true'; leaving it empty means no path-based risk escalation, not an error." },
+    "router.riskKeywords": { "type": "string", "description": "Optional, comma-separated case-insensitive keywords matched against touched file paths and a task's free-text note, e.g. 'cognito,oauth,phi,payment'. Same always-'deep' effect as router.riskPaths." },
+    "router.tiers.fast.agent": { "type": "string", "description": "Name of the subagent (or human process) route-task.py recommends for the 'fast' tier. Required only if router.enabled is 'true'." },
+    "router.tiers.standard.agent": { "type": "string", "description": "Same, for the 'standard' tier. Required only if router.enabled is 'true'." },
+    "router.tiers.deep.agent": { "type": "string", "description": "Same, for the 'deep' tier. Required only if router.enabled is 'true'." }
+  }
+}
