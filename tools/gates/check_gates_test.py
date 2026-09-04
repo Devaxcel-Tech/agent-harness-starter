@@ -278,6 +278,38 @@ case("a TEST file alone does not trip it (mutating a test is meaningless)",
      lambda t: ((t / "src").mkdir(), (t / "src" / "a.test.ts").write_text("test('x',()=>{});\n", encoding="utf-8")),
      0, "not applicable")
 
+# A pytest-style PREFIXED test file (test_foo.py has no matching suffix) must not count as product
+# source either — the same class of false positive TEST_SUFFIXES exists to prevent, just on the
+# other end of the filename.
+case("a pytest-PREFIXED test file alone does not trip it", "check_mutation_applicability.py",
+     lambda t: ((t / "src").mkdir(), (t / "src" / "test_a.py").write_text("def test_x(): pass\n", encoding="utf-8")),
+     0, "not applicable")
+
+# A Java project's build file is present regardless of whether mutation testing was ever configured,
+# so presence alone must not satisfy the gate — it needs the pitest plugin actually declared.
+case("a pom.xml with no pitest plugin does not satisfy Java mutation config",
+     "check_mutation_applicability.py",
+     lambda t: ((t / "src").mkdir(), (t / "src" / "A.java").write_text("class A {}\n", encoding="utf-8"),
+                (t / "pom.xml").write_text("<project></project>\n", encoding="utf-8")),
+     1, "unobtainable")
+
+case("a pom.xml declaring the pitest plugin satisfies Java mutation config",
+     "check_mutation_applicability.py",
+     lambda t: ((t / "src").mkdir(), (t / "src" / "A.java").write_text("class A {}\n", encoding="utf-8"),
+                (t / "pom.xml").write_text("<project><plugin>org.pitest</plugin></project>\n", encoding="utf-8")),
+     0)
+
+# gates.config.json is the settings file this gate reads instead of requiring an edit to the script
+# — the whole point of moving language settings out of code.
+case("gates.config.json's configCandidates satisfies mutation config without editing the script",
+     "check_mutation_applicability.py",
+     lambda t: ((t / "src").mkdir(), (t / "src" / "a.rs").write_text("fn main() {}\n", encoding="utf-8"),
+                (t / "tools" / "gates" / "gates.config.json").write_text(
+                    json.dumps({"mutationApplicability": {"configCandidates": ["my-tool.yml"]}}),
+                    encoding="utf-8"),
+                (t / "my-tool.yml").write_text("", encoding="utf-8")),
+     0)
+
 # ── Regressions found by ADVERSARIAL TESTING of this kit, each pinned here ───────────────────────
 # Every case below corresponds to a defect that existed and shipped-then-was-caught. They are the most
 # valuable cases in the file, because each one is a hole somebody already fell into.

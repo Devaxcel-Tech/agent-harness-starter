@@ -29,6 +29,10 @@ rows=""
 # A listed gate missing from the checkout is a could-not-run, and it blocks.
 if [ -f tools/gates/expected-gates.txt ]; then
   while IFS= read -r name; do
+    # Strip a trailing CR: a checkout with CRLF line endings (the common Windows default) leaves one
+    # on every line `read` sees, so `name` becomes "check_decisions.py\r" — a path that never matches
+    # a real file, and every gate is misreported as missing on every single run.
+    name="${name%$'\r'}"
     case "$name" in ''|\#*) continue ;; esac
     if [ ! -f "tools/gates/$name" ]; then
       rows+="| \`$name\` | **COULD NOT RUN** | listed in expected-gates.txt and absent from the checkout |

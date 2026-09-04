@@ -30,10 +30,29 @@ except ImportError:
     )
     sys.exit(2)
 
-ROOT = repo_root()
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from check_qa_config import parse_flat_yaml  # noqa: E402
 
-# ── Tailor if your qa.config.yaml points evidence.root somewhere else ───────────────────────────────
-EVIDENCE_ROOT = Path("reports/qa-workflow")
+ROOT = repo_root()
+DEFAULT_EVIDENCE_ROOT = "reports/qa-workflow"
+
+
+def evidence_root() -> Path:
+    """Where result.json lives, read from qa.config.yaml's evidence.root — never hardcoded.
+
+    A project that points evidence.root somewhere else (its qa.config.yaml says so) but has this
+    gate look in the built-in default finds nothing to check and reports VERIFIED, while a fabricated
+    result.json sits untouched in the real location. Reading the same key run-qa-workflow.sh writes to
+    is the only way this stays pointed at the actual evidence.
+    """
+    config_path = ROOT / "qa.config.yaml"
+    if not config_path.is_file():
+        return ROOT / DEFAULT_EVIDENCE_ROOT
+    try:
+        cfg = parse_flat_yaml(config_path.read_text(encoding="utf-8"))
+    except OSError:
+        return ROOT / DEFAULT_EVIDENCE_ROOT
+    return ROOT / cfg.get("evidence.root", DEFAULT_EVIDENCE_ROOT)
 
 REQUIRED_TOP = {"schemaVersion", "workflow", "scope", "generatedAt", "stages", "finalResult"}
 REQUIRED_STAGE_KEYS = {"harness": {"verdict", "evidencePath"}, "e2e": {"verdict", "evidencePath"}}
@@ -53,18 +72,26 @@ def rollup(*verdicts: str) -> str:
     return max(verdicts, key=lambda v: ROLLUP_ORDER.get(v, 3))
 
 
-def validate_one(path: Path) -> list[str]:
+def validate_one(path: Path) -> tuple[list[str], str | None]:
+    """Returns (violations, unreadable). At most one of the two is ever non-empty/non-None.
+
+    A file this gate could not even open or parse is NOT a violation — a violation is a claim that
+    the record's own inputs disagree with each other, which requires having read it. "I could not
+    look at this file" and "I looked, and it lied" are different findings, and collapsing them means
+    an unreadable file (a permission problem, a truncated write) gets reported as caught tampering
+    when nothing was actually checked.
+    """
     rel = path.relative_to(ROOT)
     violations: list[str] = []
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
-        return [f"{rel}: could not be read/parsed as JSON: {exc}"]
+        return [], f"{rel}: could not be read or parsed as JSON: {exc}"
 
     missing_top = REQUIRED_TOP - data.keys()
     if missing_top:
         violations.append(f"{rel}: missing top-level field(s) {sorted(missing_top)}")
-        return violations  # nothing further is safe to inspect
+        return violations, None  # nothing further is safe to inspect
 
     stages = data.get("stages", {})
     for name, required in REQUIRED_STAGE_KEYS.items():
@@ -92,11 +119,11 @@ def validate_one(path: Path) -> list[str]:
         )
 
     if violations:
-        return violations
+        return violations, None
 
     final = data.get("finalResult")
     if final not in FINAL_VERDICTS:
-        return [f"{rel}: finalResult {final!r} not one of {sorted(FINAL_VERDICTS)}"]
+        return [f"{rel}: finalResult {final!r} not one of {sorted(FINAL_VERDICTS)}"], None
 
     harness_v = stages["harness"]["verdict"]
     e2e_v = E2E_TO_ROLLUP.get(stages["e2e"]["verdict"], stages["e2e"]["verdict"])
@@ -110,31 +137,47 @@ def validate_one(path: Path) -> list[str]:
             "inputs is worse than a missing record — it looks trustworthy and is not."
         )
 
-    return violations
+    return violations, None
 
 
 def main() -> int:
-    search_root = ROOT / EVIDENCE_ROOT
-    if not search_root.is_dir():
+    evidence_dir = evidence_root()
+    evidence_rel = evidence_dir.relative_to(ROOT) if evidence_dir.is_relative_to(ROOT) else evidence_dir
+    if not evidence_dir.is_dir():
         return report(
             "qa workflow result contract",
             INCOMPLETE,
-            unproven=[f"{EVIDENCE_ROOT} does not exist yet — no QA workflow run has produced a result."],
+            unproven=[f"{evidence_rel} does not exist yet — no QA workflow run has produced a result."],
             note="Legitimate before the first run. Not a pass: nothing was verified.",
         )
 
-    files = sorted(search_root.rglob("result.json"))
+    files = sorted(evidence_dir.rglob("result.json"))
     if not files:
         return report(
             "qa workflow result contract",
             INCOMPLETE,
-            unproven=[f"{EVIDENCE_ROOT} exists but holds no result.json yet."],
+            unproven=[f"{evidence_rel} exists but holds no result.json yet."],
             note="Legitimate before the first run. Not a pass: nothing was verified.",
         )
 
     violations: list[str] = []
+    unreadable: list[str] = []
     for f in files:
-        violations.extend(validate_one(f))
+        v, u = validate_one(f)
+        violations.extend(v)
+        if u:
+            unreadable.append(u)
+
+    if unreadable:
+        return report(
+            "qa workflow result contract",
+            CANNOT_RUN,
+            violations=unreadable,
+            note=(
+                "This is COULD-NOT-RUN, not a violation — the gate never got to compare these records' "
+                "inputs against their own finalResult, so it has no honest verdict to give on them."
+            ),
+        )
 
     if violations:
         return report("qa workflow result contract", VIOLATED, violations=violations)

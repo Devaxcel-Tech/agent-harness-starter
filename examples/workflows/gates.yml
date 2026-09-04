@@ -24,6 +24,12 @@ jobs:
       - name: Gate fault injection
         if: ${{ !cancelled() }}
         run: python3 tools/gates/check_gates_test.py
+      - name: QA workflow config (only if a project has adopted the optional layer)
+        if: ${{ !cancelled() && hashFiles('qa.config.yaml') != '' }}
+        run: python3 tools/qa-workflow/check_qa_config.py
+      - name: QA workflow result contract (only if a project has adopted the optional layer)
+        if: ${{ !cancelled() && hashFiles('qa.config.yaml') != '' }}
+        run: python3 tools/qa-workflow/check_result_contract.py
       - name: Upload the evidence record
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4

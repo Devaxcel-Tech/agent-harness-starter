@@ -57,6 +57,12 @@ cp .gitleaks.toml <your-repo>/
 cp docs/DECISIONS.md <your-repo>/docs/
 cp examples/workflows/*.yml <your-repo>/.github/workflows/
 
+# tools/gates carries loop-obligations.expected — the checklist for the task-loop skill. Land the
+# skill it checks in the SAME step, or check_loop_obligations.py reports COULD NOT RUN immediately
+# (the register exists, the skill it is checking does not) before you have done anything else.
+mkdir -p <your-repo>/examples/skills/task-loop
+cp -r examples/skills/task-loop <your-repo>/examples/skills/
+
 # 2. Prove the gates can fail — run this FIRST, it validates the validators
 python3 tools/gates/check_gates_test.py
 

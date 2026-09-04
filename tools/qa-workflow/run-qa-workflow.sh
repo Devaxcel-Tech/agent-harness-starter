@@ -312,8 +312,22 @@ PY
 self_check() {
   # Every write runs the result-contract gate on itself, so a malformed record is caught the moment
   # it is produced rather than at the next unrelated CI run.
+  #
+  # The checker's exit code must reach THIS function's caller. Printing its output and unconditionally
+  # `return 0`-ing afterwards means a caller reading this script's own exit code sees success even
+  # when the record the script just wrote failed its own honesty check — a CI pipeline gating on this
+  # script's exit status would show green while the evidence it just produced says red.
   local checker; checker="$(dirname "${BASH_SOURCE[0]}")/check_result_contract.py"
-  [ -f "$checker" ] && python3 "$checker"
+  [ -f "$checker" ] || return 0
+  local out; local rc
+  out="$(python3 "$checker" 2>&1)"; rc=$?
+  echo "$out"
+  if [ "$rc" -ne 0 ]; then
+    echo "" >&2
+    echo "run-qa-workflow: self-check FAILED (check_result_contract.py exit $rc) — the record just" >&2
+    echo "                 written does not honestly reflect its own inputs. See output above." >&2
+    return 1
+  fi
   return 0
 }
 
@@ -324,13 +338,13 @@ case "$mode" in
     [ -n "$ticket" ] || { echo "usage: run-qa-workflow.sh ticket <TICKET-ID>" >&2; exit 2; }
     run_harness_stage
     run_e2e_stage ticket "$ticket"
-    write_result ticket "$ticket"
+    write_result ticket "$ticket" || exit 1
     ;;
   regression)
     scope="${2:-full}"
     run_harness_stage
     run_e2e_stage regression "$scope"
-    write_result regression "$scope"
+    write_result regression "$scope" || exit 1
     ;;
   verify)
     result_path="${2:-}"; verdict="${3:-}"; reviewer="${4:-}"; notes="${5:-}"
@@ -338,7 +352,7 @@ case "$mode" in
       echo "usage: run-qa-workflow.sh verify <result.json> <PASS|FAIL|BLOCKED> <reviewer> [notes]" >&2
       exit 2
     }
-    record_verification "$result_path" "$verdict" "$reviewer" "$notes"
+    record_verification "$result_path" "$verdict" "$reviewer" "$notes" || exit 1
     ;;
   *)
     echo "usage: run-qa-workflow.sh ticket <TICKET-ID> | regression [scope-id] | verify <result.json> <verdict> <reviewer> [notes]" >&2

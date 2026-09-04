@@ -15,6 +15,13 @@ cp -r tools/gates tools/qa <project>/tools/
 cp -r .githooks <project>/
 cp .gitleaks.toml <project>/
 cp docs/DECISIONS.md <project>/docs/
+
+# tools/gates carries loop-obligations.expected — the checklist for the task-loop skill. Land the
+# skill it checks in the SAME step, or check_loop_obligations.py reports COULD NOT RUN immediately
+# (the register exists, the skill it is checking does not) on a checkout you have not touched yet.
+mkdir -p <project>/examples/skills/task-loop
+cp -r examples/skills/task-loop <project>/examples/skills/
+
 python3 <project>/tools/gates/check_gates_test.py   # prove the gates can fail, first
 ```
 
