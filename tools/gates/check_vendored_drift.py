@@ -59,6 +59,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import stat
 import sys
 from pathlib import Path
 
@@ -71,6 +73,22 @@ MANIFEST = Path("tools/gates/vendored.json")
 
 def sha256(p: Path) -> str:
     return hashlib.sha256(p.read_bytes()).hexdigest()
+
+
+def _is_file(p: Path) -> bool:
+    """True if `p` is a regular file, False if it does not exist; any other OS error RAISES.
+
+    Deliberately not `Path.is_file()`. From Python 3.14 that method swallows every OSError and returns
+    False, so a path the OS refused to probe (name too long, permission denied) read as "not present"
+    and was reported as MISSING, a violation, instead of the could-not-run it is. Only "no such file"
+    and "a parent is not a directory" mean absent; everything else is a probe failure the caller turns
+    into CANNOT_RUN via `_unprobeable`.
+    """
+    try:
+        st = os.stat(p)
+    except (FileNotFoundError, NotADirectoryError):
+        return False
+    return stat.S_ISREG(st.st_mode)
 
 
 def _unprobeable(rel: str, exc: OSError) -> int:
@@ -172,7 +190,7 @@ def main() -> int:
     for rel, expected in sorted(m.get("verbatim", {}).items()):
         f = ROOT / rel
         try:
-            present = f.is_file()
+            present = _is_file(f)
             actual = sha256(f) if present else None
         except OSError as exc:
             return _unprobeable(rel, exc)
@@ -201,7 +219,7 @@ def main() -> int:
     for rel, spec in sorted(m.get("templated", {}).items()):
         f = ROOT / rel
         try:
-            present = f.is_file()
+            present = _is_file(f)
             text = f.read_text(encoding="utf-8", errors="replace") if present else None
         except OSError as exc:
             return _unprobeable(rel, exc)
