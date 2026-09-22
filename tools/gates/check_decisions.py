@@ -166,8 +166,13 @@ def scan_citations() -> list[tuple[str, int, str]]:
             rel = path.relative_to(ROOT)
             if set(rel.parts) & EXCLUDE_PARTS or rel == REGISTER:
                 continue
+            # as_posix(), not str(): on Windows str(rel) joins with backslashes, so
+            # "tools\\gates\\check_gates_test.py".startswith("tools/gates") is always False — the
+            # exemption silently never applies, and the gate flags its own fault-injection suite's
+            # deliberately-fake citations (an unnumbered `DEC-<n>` and friends) as real violations on
+            # every Windows checkout.
             if path.name.endswith(CITATION_EXEMPT_SUFFIXES) and any(
-                str(rel).startswith(d) for d in CITATION_EXEMPT_DIRS
+                rel.as_posix().startswith(d) for d in CITATION_EXEMPT_DIRS
             ):
                 continue
             try:

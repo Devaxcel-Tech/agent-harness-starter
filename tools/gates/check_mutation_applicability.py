@@ -43,6 +43,7 @@ so it never emits 2 or 3. See harness.py; 2 and 3 are never a pass.
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -51,8 +52,37 @@ from harness import VERIFIED, VIOLATED, repo_root, report  # noqa: E402
 
 ROOT = repo_root()
 
-# ── Tailor these ─────────────────────────────────────────────────────────────────────────────────
+# ── Tailor via a settings file, not by editing this script ─────────────────────────────────────────
 #
+# Editing the constants below to fit a project's language used to be the documented way to tailor
+# this gate — but that puts this file in direct conflict with check_vendored_drift.py: a project that
+# also tracks this kit as a vendored upstream (see examples/vendored.json) gets every such edit
+# reported as DRIFTED LOCALLY, i.e. "someone tampered with this", for the exact edit the docs told it
+# to make. So the settings live in an optional JSON file instead, and this script stays byte-identical
+# across projects. Create `tools/gates/gates.config.json` to ADD to the defaults below (never to
+# replace them) — see SETTINGS_FILE's docstring for the shape.
+SETTINGS_FILE = Path("gates.config.json")
+
+
+def _settings() -> dict:
+    path = ROOT / "tools" / "gates" / SETTINGS_FILE
+    if not path.is_file():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    settings = data.get("mutationApplicability", {}) if isinstance(data, dict) else {}
+    return settings if isinstance(settings, dict) else {}
+
+
+# tools/gates/gates.config.json (optional):
+#   { "mutationApplicability": {
+#       "testSuffixes": ["_spec.rb"], "testPrefixes": ["should_"],
+#       "configCandidates": ["my-mutation-tool.yml"], "excludeParts": ["vendor-extra"]
+#   } }
+_SETTINGS = _settings()
+
 # THIS IS A DENY-LIST BY EXTENSION, NOT AN ALLOW-LIST BY DIRECTORY, and that is a deliberate
 # correction. The first version listed `src/**`, `lib/**`, `packages/**` and `app/**`. Adversarial
 # testing put a source file in `internal/service/` and the gate reported NOT APPLICABLE — a silent
@@ -66,17 +96,37 @@ SOURCE_EXTENSIONS = {
     ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".py", ".go", ".rs", ".java", ".kt", ".kts",
     ".rb", ".cs", ".swift", ".scala", ".php", ".c", ".cc", ".cpp", ".h", ".hpp", ".m", ".mm",
 }
-# NOTE: these defaults are JS/TS only, while SOURCE_EXTENSIONS spans ~15 languages. A repo whose ONLY
-# code is test files in another language (Go `foo_test.go`, Python `test_foo.py`, Rust `#[cfg(test)]`
-# modules) will count them as product source and report UNOBTAINABLE. That fails LOUD (never a silent
-# pass), but if it surprises you, add your language's test pattern here — this tuple is meant to be tailored.
-TEST_SUFFIXES = (".test.ts", ".spec.ts", "_test.ts", ".test.js", ".spec.js", ".d.ts")
-# Any one of these existing means the tooling is present. Add your language's equivalent —
-# stryker.conf.json (JS/TS), pom.xml with PIT, mutmut.ini / setup.cfg (Python), cargo-mutants.toml.
+# Suffix and prefix test-file conventions across the languages SOURCE_EXTENSIONS covers, so a
+# project whose only code is test files in Python, Java, Go, Kotlin, Ruby or PHP is not mistaken for
+# untested product source. Add a project's own convention via gates.config.json rather than editing
+# this tuple.
+TEST_SUFFIXES = (
+    ".test.ts", ".spec.ts", "_test.ts", ".test.tsx", ".spec.tsx",
+    ".test.js", ".spec.js", ".test.jsx", ".spec.jsx", ".d.ts",
+    "_test.py", "_test.go", "_test.rs",
+    "Test.java", "Tests.java", "Test.kt", "Tests.kt",
+    "_spec.rb", "Test.php",
+) + tuple(_SETTINGS.get("testSuffixes", []))
+# Prefix convention (pytest's default): test_foo.py has no matching SUFFIX, only a prefix.
+TEST_PREFIXES = ("test_",) + tuple(_SETTINGS.get("testPrefixes", []))
+# Any one of these existing means the tooling is present — stryker.conf.json (JS/TS), mutmut.ini
+# (Python), cargo-mutants.toml (Rust). Add a project's own via gates.config.json.
 CONFIG_CANDIDATES = [
     "stryker.config.json", "stryker.conf.json", ".stryker.conf.json",
+    "stryker.conf.mjs", "stryker.conf.cjs", ".stryker.conf.mjs", ".stryker.conf.cjs",
     "tools/qa/stryker.config.json", "mutmut.ini", "cargo-mutants.toml",
-]
+] + list(_SETTINGS.get("configCandidates", []))
+# Java/JVM (PIT) has no dedicated config FILE by convention — its plugin is declared inside pom.xml
+# or build.gradle, files every Java project has regardless of whether PIT is configured. Requiring
+# just their presence would pass any Java project untouched by mutation testing, so — uniquely among
+# the checks above — these two are matched by PRESENCE AND CONTENT: the build file must actually
+# declare the pitest plugin. Without this, a Java project had no config candidate that could ever fit
+# it: pom.xml alone was too generic to add, and nothing else in CONFIG_CANDIDATES applied.
+CONTENT_CONFIG_CANDIDATES = {
+    "pom.xml": "pitest",
+    "build.gradle": "pitest",
+    "build.gradle.kts": "pitest",
+}
 EXCLUDE_PARTS = {
     # Dependencies and build output — never this project's source.
     "node_modules", ".git", "dist", "build", "out", "target", "vendor", ".venv", "venv",
@@ -96,7 +146,7 @@ EXCLUDE_PARTS = {
     #
     # If your product genuinely lives under one of these, remove it — and read the reported file count.
     "tools", "scripts", ".githooks",
-}
+} | set(_SETTINGS.get("excludeParts", []))
 
 
 def is_excluded(rel: Path) -> bool:
@@ -125,10 +175,25 @@ def source_files() -> list[str]:
         # Skip any dot-directory (.git, .github, .venv, editor state) plus the named exclusions.
         if any(part.startswith(".") for part in rel.parts[:-1]) or is_excluded(rel):
             continue
-        if p.name.endswith(TEST_SUFFIXES):
+        if p.name.endswith(TEST_SUFFIXES) or p.name.startswith(TEST_PREFIXES):
             continue
         out.add(str(rel))
     return sorted(out)
+
+
+def content_config_match() -> str | None:
+    """A build file present AND declaring its mutation plugin — see CONTENT_CONFIG_CANDIDATES."""
+    for name, marker in CONTENT_CONFIG_CANDIDATES.items():
+        f = ROOT / name
+        if not f.is_file():
+            continue
+        try:
+            text = f.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        if marker in text:
+            return f"{name} (declares {marker!r})"
+    return None
 
 
 def main() -> int:
@@ -150,6 +215,10 @@ def main() -> int:
         )
 
     found = [c for c in CONFIG_CANDIDATES if (ROOT / c).is_file()]
+    if not found:
+        content_match = content_config_match()
+        if content_match:
+            found = [content_match]
     if not found:
         shown = "\n".join(f"      {s}" for s in sources[:8])
         more = f"\n      … and {len(sources) - 8} more" if len(sources) > 8 else ""

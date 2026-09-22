@@ -40,6 +40,10 @@ failed=0
 # The register of gates that must exist. A name here and absent from the checkout is a could-not-run.
 if [ -f tools/gates/expected-gates.txt ]; then
   while IFS= read -r name; do
+    # Strip a trailing CR: a checkout with CRLF line endings (the common Windows default) leaves one
+    # on every line `read` sees, so `name` becomes "check_decisions.py\r" — a path that never matches
+    # a real file, and every gate is misreported as missing on every single commit.
+    name="${name%$'\r'}"
     case "$name" in ''|\#*) continue ;; esac
     if [ ! -f "tools/gates/$name" ]; then
       echo "pre-commit: BLOCKED — tools/gates/$name is listed in expected-gates.txt and missing." >&2

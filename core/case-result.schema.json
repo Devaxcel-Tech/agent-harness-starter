@@ -1,0 +1,36 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://agent-harness-starter/core/case-result.schema.json",
+  "title": "E2E case result",
+  "description": "The one file any browser/UI engine — scripted (Playwright) or agent-driven (Claude in Chrome) — writes per case it attempts, at <evidence.root>/<workflow>/<scope>/results/<CASE-ID>.json, per core/e2e-engine-contract.md §4. A scripted engine that only self-reports a suite-level exit code is not required to write these; an agent-driven engine has no exit code to fall back on and MUST write one of these for every case it attempts, including one it aborts partway through — a case that writes nothing here is indistinguishable from a case that never ran, and tools/aggregate-e2e-results.py treats 'nothing written' as BLOCKED, never as a silent pass.",
+  "type": "object",
+  "required": ["id", "engine", "verdict", "recordedAt"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Case ID, per core/e2e-engine-contract.md §2's <REGISTRY>-<AREA>-<NN> convention. Must match the file's own <CASE-ID>.json name."
+    },
+    "engine": {
+      "type": "string",
+      "description": "Which engine produced this case's verdict, e.g. 'playwright', 'claude-in-chrome', or a project-defined engine name. Free text, never special-cased by core/ tooling beyond grouping and display."
+    },
+    "verdict": {
+      "type": "string",
+      "enum": ["PASS", "FAIL", "BLOCKED", "CANNOT_AUTOMATE", "NOT_EXECUTED"],
+      "description": "core/e2e-engine-contract.md §3's five-word vocabulary — nothing else."
+    },
+    "evidence": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Repo-relative paths to this case's screenshots/recordings, under the same evidence layout. Must never contain a credential value, token, or other secret — screenshots must not show a field with a credential visibly entered."
+    },
+    "note": {
+      "type": "string",
+      "description": "Why this verdict — required in practice for anything other than PASS, though not schema-enforced here (schema enforcement of that lives in the same place result.schema.json enforces the analogous rule for qaVerification)."
+    },
+    "recordedAt": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}
